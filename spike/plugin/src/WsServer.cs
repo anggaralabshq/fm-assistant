@@ -82,8 +82,8 @@ internal sealed class WsServer
             op = (string)req["op"] ?? throw new OpException("bad-request", "missing op");
             var args = req["args"] as JsonObject ?? new JsonObject();
             // Multi-frame ops orchestrate their own main-thread hops; the rest run as one main-thread job.
-            var job = op switch { "squad" => Squad.Run(args), "read" => GenericRead.Run(args), "staff_search_visible" => Staff.Run(args), _ => Plugin.Queue.Run(() => Ops.Dispatch(op, args)) };
-            var limit = op is "squad" or "read" or "staff_search_visible" ? SlowOpTimeout : JobTimeout;
+            var job = op switch { "squad" => Squad.Run(args), "read" => GenericRead.Run(args), "staff_search_visible" => Staff.Run(args), "training_set_session" => Training.Set(args), _ => Plugin.Queue.Run(() => Ops.Dispatch(op, args)) };
+            var limit = op is "squad" or "read" or "staff_search_visible" or "training_set_session" ? SlowOpTimeout : JobTimeout;
             if (await Task.WhenAny(job, Task.Delay(limit)) != job)
                 throw new OpException("main-thread-timeout", $"{op} did not finish within {limit.TotalSeconds}s");
             return new JsonObject { ["id"] = id, ["ok"] = true, ["result"] = await job };

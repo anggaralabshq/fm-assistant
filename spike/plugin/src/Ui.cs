@@ -41,7 +41,7 @@ internal static class Ui
         return a;
     }
 
-    private static string OwnText(VisualElement n)
+    internal static string OwnText(VisualElement n)
     {
         try
         {
@@ -53,13 +53,13 @@ internal static class Ui
         catch { return null; }
     }
 
-    private static bool Visible(VisualElement n)
+    internal static bool Visible(VisualElement n)
     {
         try { var r = n.worldBound; return r.width > 0 && r.height > 0 && n.resolvedStyle.display != DisplayStyle.None; }
         catch { return false; }
     }
 
-    private static void Walk(VisualElement n, int depth, Action<VisualElement> f)
+    internal static void Walk(VisualElement n, int depth, Action<VisualElement> f)
     {
         if (n == null || depth > 80) return;
         f(n);
@@ -108,7 +108,7 @@ internal static class Ui
         return Row(hit, hitText);
     }
 
-    private static void Click(VisualElement hit)
+    internal static void Click(VisualElement hit)
     {
         var pos = hit.worldBound.center;
         var down = PointerDownEvent.GetPooled();
@@ -120,7 +120,7 @@ internal static class Ui
     }
 
     /// Binding path behind an SIText (e.g. a property name), null when not a direct binding. Discovery aid.
-    private static string BindPath(VisualElement n)
+    internal static string BindPath(VisualElement n)
     {
         try
         {

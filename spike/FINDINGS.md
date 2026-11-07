@@ -85,3 +85,19 @@ Residual risk: unverified community binaries run inside the FM27 process with th
 - Discovery aids: `ui_dump` now reports each SIText's binding path (`bind`), `list_rows` reports table column ids, `read` takes `chain: {prop: [subprops]}`.
 - **Crash found + fixed:** overwriting `FmSpike.dll` in place while the game runs crashes it on the next JIT (SIGSEGV in `SignatureNative::GetSignature`; the file is mmapped). `build.sh` now copies to `.new` and renames.
 - Main menu `squad` → `no-career-loaded: load a career first` (Task 3 Step 4 check).
+
+## Task 5 — change one training session (2026-11-07, build 27.0.0.2493426)
+
+- Save backup before any action: `~/fm-spike-backups/20261107-133259/Nael Anggara - Java United.fm`, sha256 `5e9ed5d108586ca04e71b5fb93ec88603882afd33b28630ea8c63c93f30ba042`. After the run the save still has the same sha256 (game never saved) and original `fm.app` signature is valid.
+- Screen: panel **`TrainingScreen`** (LATIHAN tab) shows a 6-week month view, 3 slots per day (S1–S3). Popup on clicking a slot: **`TrainingSessionSelectCard`** (week editor + category radios + session option radios + buttons named `confirm` / `cancel`).
+- Language-neutral anchors (binding paths): `day.DayOfTheMonth`, `week.TrainingScheduleName`, `Event.SessionName`, `Event.TeamOpponent.AbbreviatedName` (match in a slot), option radios `item.DisplayValue`. Session *names* are localized text — Phase 1 should map them via a session-id binding, not the display string.
+- `training_get` → 42 days × 3 slots matching the screen; matches show as `vs <opp>`.
+- `check_training.py`: **OK: changed 17/0 Kondisi Fisik -> Istirahat -> Kondisi Fisik; calendar restored; wrong-screen off screen.**
+- Interface deviation from plan: FM27 has S1/S2/S3 per day (not morning/afternoon/extra) and the screen is a month view, so ops address `{index: day index in the view, slot: 0-2}`.
+- "Perjalanan" (travel) slots exist around away matches; check avoids them (may not be restorable from the option list).
+
+## Startup crash (open, Phase 1)
+
+- ~1 in 5 launches: SIGSEGV ~7–9 s after start in `libunwind setInfoBasedOnIPRegister ← PAL_VirtualUnwind ← DebugStackTrace::GetStackFramesInternal` (CoreCLR capturing a managed exception's stack trace through frames libunwind can't parse). Same signature with plugin 0.0.1-old and new → not caused by new ops. Reports: `~/Library/Logs/DiagnosticReports/Football Manager 27-2026-11-07-130758.ips`, `-133543.ips`.
+- Spike mitigation: `game.py launch` retries (process exits during startup → clear state → relaunch). Phase 1: find the thrown exception (first-chance handler log), avoid managed exceptions on IL2CPP-entered threads.
+- `load_recent` now re-clicks `LoadMostRecentSave` every 15 s (early clicks during the menu intro are ignored).
