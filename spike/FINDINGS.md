@@ -40,3 +40,17 @@ Residual risk: unverified community binaries run inside the FM27 process with th
 - `LogOutput.log`: `Chainloader startup complete`. FM27 Hook Fix resolved `GenericMethod::GetMethod` → `GameAssembly+0x7063D8`; warning `Class::Init signatures have been exhausted, using a substitute!` (non-fatal).
 - `BepInEx/interop/`: 182 DLLs incl. SI.Bindable, SI.Bindable.Reference.Core, SI.Core, SI.UI, FM.UI, FM.GamePlugin, UnityEngine.UIElementsModule.
 - Original `fm.app` signature after run: `codesign --verify --deep --strict` → valid (unchanged).
+
+## Task 2 — plugin + ping (2026-11-07, build 27.0.0.2493426)
+
+- Plugin loads (`[FmSpike] 0.0.1 loaded, ws://127.0.0.1:7788/`), tick via Harmony prefix on `UIElementsRuntimeUtility.RepaintPanels` works, `BindingSubsystem.Initialise` postfix captures bindings.
+- Main menu ping: `{'plugin': 'fm-spike', 'version': '0.0.1', 'game_build': '27.0.0.2493426', 'bindings_captured': True, 'career_loaded': False}`.
+- Game launch without the owner: `open steam://rungameid/4530370` (Steam running) works; plugin up ~10 s, bindings ~25 s.
+- Security: WsServer rejects handshakes with an `Origin` header (blocks browser pages). Phase 1 adds a per-session token.
+
+## Property-name discovery (Task 3 Step 1, main menu)
+
+- Candidate list: 1083 PascalCase literals harvested from fm-dof-mcp (FM26) SquadReport/QueryPlayers/EntityVocabulary/MyClub.
+- **989 / 1083 resolve in FM27** via `PropertyIdentifierSet.Instance.GetID`. Includes every `Attribute*` (Acceleration…WorkRate, incl. hidden ones like Consistency/Professionalism — must respect CanView* gates), `Wage`, `FullContract`, `ContractLength`, `ContractDaysElapsed`, `Condition`, `Fatigue`, `TransferBudget`, `CommittedWageSpending`, `TrainingCalendar`, `CustomTrainingSchedule`, `TrainingSessions`, `StaffScoutList`, `StaffAllListFiltered`, `CanViewStaffSearch`.
+- Unresolved (94): see scratch list; mostly FM26-only debug/UI names.
+- Binding root children include `Human`, `game`, `data`, `continue`, `SetupGame`, `IGE`, `fmpedia`.

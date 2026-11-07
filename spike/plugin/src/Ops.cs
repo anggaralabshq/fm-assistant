@@ -1,0 +1,27 @@
+using System.Text.Json.Nodes;
+
+namespace FmSpike;
+
+/// All ops run on the main thread. Unknown op -> "unknown-op: <op>".
+internal static class Ops
+{
+    public static JsonNode Dispatch(string op, JsonObject args)
+    {
+        switch (op)
+        {
+            case "ping": return Ping();
+            case "prop_check": return Discover.PropCheck(args);
+            case "tree": return Discover.TreeDump(args);
+            default: throw new OpException("unknown-op", op);
+        }
+    }
+
+    private static JsonNode Ping() => new JsonObject
+    {
+        ["plugin"] = "fm-spike",
+        ["version"] = Plugin.Version,
+        ["game_build"] = UnityEngine.Application.version,
+        ["bindings_captured"] = Plugin.Bindings != null,
+        ["career_loaded"] = Tree.HumanClubUid() != null,
+    };
+}
