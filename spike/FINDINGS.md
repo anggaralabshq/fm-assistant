@@ -46,7 +46,7 @@ Residual risk: unverified community binaries run inside the FM27 process with th
 - Plugin loads (`[FmSpike] 0.0.1 loaded, ws://127.0.0.1:7788/`), tick via Harmony prefix on `UIElementsRuntimeUtility.RepaintPanels` works, `BindingSubsystem.Initialise` postfix captures bindings.
 - Main menu ping: `{'plugin': 'fm-spike', 'version': '0.0.1', 'game_build': '27.0.0.2493426', 'bindings_captured': True, 'career_loaded': False}`.
 - Game launch without the owner: `open steam://rungameid/4530370` (Steam running) works; plugin up ~10 s, bindings ~25 s.
-- Security: WsServer rejects handshakes with an `Origin` header (blocks browser pages). Phase 1 adds a per-session token.
+- Security: WsServer rejects handshakes with an `Origin` header (blocks browser pages). Phase 1 adds a session token for every request; Phase 2 adds the per-plan token minted by `fm apply` (spec §8).
 
 ## Property-name discovery (Task 3 Step 1, main menu)
 
@@ -72,7 +72,7 @@ Residual risk: unverified community binaries run inside the FM27 process with th
 
 - Owner's macOS permission: **Screen Recording** (screencapture works now; Accessibility not granted).
 - After a SIGKILL, macOS shows a hidden "reopen windows?" modal (`NSPersistentUIRestorer promptToIgnorePersistentStateWithCrashHistory`) that blocks the next launch before `il2cpp_init` — the cause of the earlier "hang". Fix: delete `~/Library/Saved Application State/com.SportsInteractive.FootballManager27.savedState` and `defaults write com.SportsInteractive.FootballManager27 ApplePersistenceIgnoreState -bool YES`.
-- `spike/client/game.py restart --load`: kill → clear state → `open steam://rungameid/4530370` → wait for plugin → click `LoadMostRecentSave` (MainMenu, language-neutral element name) → career loaded. Full cycle ~1.5 min, no owner input. Refuses to kill a loaded career unless `--allow-career` (caller checks in-game date == save date first; agent never saves).
+- `spike/client/game.py restart --load`: kill → clear state → `open steam://rungameid/4530370` → wait for plugin → click `LoadMostRecentSave` (MainMenu, language-neutral element name) → career loaded. Full cycle ~1.5 min, no owner input. **Kill guard (fixed after final review):** fails closed — kills only when no career is loaded, or with `--allow-career` when this helper itself loaded the career in the same game process (marker `~/.fm-assistant/agent-loaded.json`). An owner-loaded career is never killed; "in-game date == save date" is NOT a valid unsaved-progress check (a training change leaves the date unchanged). Plugin unreachable while the game runs → refuse. Tests: `test_game.py`.
 - New UI ops: `ui_dump {panel, depth, max}` (element tree: name/type/text/bounds), `ui_click {name, panel, index}`.
 
 ## Task 4 — Staff Search (2026-11-07, build 27.0.0.2493426)
@@ -108,10 +108,12 @@ Residual risk: unverified community binaries run inside the FM27 process with th
 |---|---|---|---|
 | 1 | BepInEx loader runs on macOS arm64, SIP on, original app untouched | **PASS** | `Chainloader startup complete`; `codesign --verify --deep --strict fm.app` valid before and after all tasks |
 | 2 | Read squad (≥3 attributes, contract, wage) | **PASS** | `check_squad.py` → `OK: 28 players, 28/28 matched save summary`, 4.1 s |
-| 3 | Read staff search | **PASS** | `check_staff.py` → `OK: 173/173 staff rows, 17 on-screen names all present`; wrong screen → `wrong-screen` |
-| 4 | Change one training session and verify | **PASS** | `check_training.py` → `OK: changed 17/0 Kondisi Fisik -> Istirahat -> Kondisi Fisik; calendar restored` |
+| 3 | Read staff search (≥1 page + requested wage) | **PASS (partial)** | `check_staff.py` → `OK: 173/173 staff rows, 17 on-screen names all present`; wrong screen → `wrong-screen`. **Requested wage not found** in the search view (`wage_demand: null`); its source is unproven → Phase 1a Task 7 discovery |
+| 4 | Change one training session and verify | **PASS** | `check_training.py` → `OK: changed 17/0 Kondisi Fisik -> Istirahat -> Kondisi Fisik; restored; unknown option cancelled; wrong-screen off screen, calendar unchanged` |
 
 **Go for Phase 1.** No spec fallback needed (spec §9).
+
+Plan deviations (all deliberate, spike-only): training addressed `{day index, slot 0-2}` (FM27 month view, S1–S3); `squad` returns raw prop names with nested `contract` instead of the plan's flat shape; `prop_check {names}` replaced `dump_props {filter}`; `staff_search_visible` has no `cells` by column header (headless person reads instead); staff check used the worldwide database, not a Scout filter; navigation by Indonesian tab text.
 
 Surprises:
 - Fully unattended loop works: restart game, load career, navigate, read, act (`game.py`) — the owner never touched the laptop for Tasks 3–5.
@@ -125,9 +127,18 @@ Discovered names: see Task 3–5 sections (panels `StaffSearchReport`, `Training
 Phase 1 difficulty (first three features):
 | Feature | Read | Action | Estimate |
 |---|---|---|---|
-| F11 Staff search | done (all rows + 18 attributes + role) | `staff.offer`: open contract offer from staff row, read wage demand there, confirm — UI path still to map | medium |
+| F11 Staff search | rows + 18 attributes + role done; **wage demand source unknown** | `staff.offer`: open contract offer from staff row, read wage demand there, confirm — UI path still to map | medium once wage source is found; unestimated before |
 | F6 Transfer/scouting ranker | budget (`TransferBudget`) done; player search = same list-read route as staff search | shortlist/scout request/bid via UI — per-action mapping | medium–high (bids + negotiation counters) |
 | F10 Training | calendar read + single-slot change done | weekly apply = 21 single-slot changes or the schedule template picker; individual training not explored | low–medium |
+
+Phase 1 design rules from the final review:
+- Main-thread jobs carry a deadline and are skipped in `Drain` once expired; multi-step ops take a cancellation token; a client timeout on an action means "outcome unknown → re-read state", never "unavailable".
+- Every read releases what it planted: keep the parent key in `Plant`, close parent + children in `finally` (spike leaks `__fmspike.N` parent nodes and, on error paths, child bindings).
+- No exceptions as control flow on the main thread: return error results there, throw only on the WebSocket thread (startup-crash suspect path).
+- No generic click ops on the socket (spike `ui_click`/`ui_click_text` can click Continue/Save). Phase 1 navigation = `nav_open` by panel id; Phase 2 actions = closed registry only.
+- Native `Bindings.Create` resolved by parameter types, not only count; pooled pointer events disposed; the bind owner object created from main-thread code.
+- A loaded career is never killed unless this tool loaded it in the same process; otherwise the owner closes it (or a safe quit-to-menu path, to be found).
+- Startup crash: isolate with a launch where the plugin is not installed ("same with old/new plugin" only rules out the new ops).
 
 Open items for Phase 1: per-session WebSocket token; startup crash root cause; safe quit-to-menu path; map localized session/option labels to ids; staff wage demand source; goalkeeping/mental/youngsters/discipline staff attribute names.
 

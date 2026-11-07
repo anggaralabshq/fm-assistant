@@ -36,13 +36,15 @@ def main() -> int:
     i, s, orig = pick
     print(f"day {i} ({first[i][0]}) slot {s}: {orig!r} -> {TARGET!r}")
 
-    r1 = c.call("training_set_session", index=i, slot=s, name=TARGET)
-    changed = cal()
-    d1 = diff(first, changed)
-    r2 = c.call("training_set_session", index=i, slot=s, name=orig)
-    restored = cal()
-
     errors = []
+    r1 = r2 = None
+    try:
+        r1 = c.call("training_set_session", index=i, slot=s, name=TARGET)
+        changed = cal()
+    finally:  # always try to put the owner's session back
+        r2 = c.call("training_set_session", index=i, slot=s, name=orig)
+    d1 = diff(first, changed)
+    restored = cal()
     if r1 != {"before": orig, "after": TARGET}:
         errors.append(f"set result {r1}")
     if d1 != [(i, s, orig, TARGET)]:
@@ -51,6 +53,19 @@ def main() -> int:
         errors.append(f"restore result {r2}")
     if restored != first:
         errors.append(f"calendar not restored: {diff(first, restored)}")
+
+    # Unknown option while the popup is open: must cancel, close the popup, change nothing.
+    try:
+        c.call("training_set_session", index=i, slot=s, name="No Such Session")
+        errors.append("unknown option: expected ui-element-missing")
+    except FmError as e:
+        if e.code != "ui-element-missing":
+            errors.append(f"unknown option: got {e.code}: {e.detail}")
+    time.sleep(1.5)
+    if any(p["panel_id"] == "TrainingSessionSelectCard" for p in c.call("panels")):
+        errors.append("unknown option: session popup left open")
+    if cal() != first:
+        errors.append("unknown option: calendar changed")
 
     c.call("ui_click_text", text="SKUAD")
     time.sleep(2.5)
@@ -61,11 +76,15 @@ def main() -> int:
         except FmError as e:
             if e.code != "wrong-screen":
                 errors.append(f"{op}: expected wrong-screen, got {e.code}: {e.detail}")
+    c.call("ui_click_text", text="LATIHAN")
+    time.sleep(3)
+    if cal() != first:
+        errors.append("calendar changed after the wrong-screen calls")
 
     if errors:
         print("FAIL:\n  " + "\n  ".join(errors))
         return 1
-    print(f"OK: changed {i}/{s} {orig} -> {TARGET} -> {orig}; calendar restored; wrong-screen off screen")
+    print(f"OK: changed {i}/{s} {orig} -> {TARGET} -> {orig}; restored; unknown option cancelled; wrong-screen off screen, calendar unchanged")
     return 0
 
 

@@ -2,42 +2,71 @@
 
     uv run python game.py restart [--load] [--allow-career]
 
-Never saves. Refuses to kill a running career unless --allow-career: the caller must first confirm
-the in-game date equals the save's date (nothing unsaved), because a kill drops unsaved progress.
+Never saves. Fails closed: kills the game only when no career is loaded, or when --allow-career is given
+AND this helper itself loaded the career in the same game process (marker file). A career the owner loaded
+may hold unsaved progress that no date check can see, so it is never killed. Plugin unreachable while the
+game runs -> refuse.
 """
 import argparse
 import subprocess
 import sys
 import time
+import json
 from pathlib import Path
 
 from fmspike import FmClient, FmError, FmUnavailable
 
 BUNDLE_ID = "com.SportsInteractive.FootballManager27"
 PROC = "shadow/fm.app/Contents/MacOS"
+MARKER = Path.home() / ".fm-assistant/agent-loaded.json"  # {"pid": "<game pid>"} written by load_recent
 
 
 def pids() -> list[str]:
     return subprocess.run(["pgrep", "-f", PROC], capture_output=True, text=True).stdout.split()
 
 
-def ping():
+def ping(timeout: float = 10):
     try:
-        return FmClient(timeout=3).call("ping")
+        return FmClient(timeout=timeout).call("ping")
     except (FmUnavailable, FmError):
         return None
 
 
-def kill(allow_career: bool) -> None:
+def agent_loaded(running: list[str]) -> bool:
+    try:
+        return json.loads(MARKER.read_text()).get("pid") in running
+    except (OSError, ValueError):
+        return False
+
+
+def kill_refusal(allow_career: bool):
+    """Reason not to kill, or None when killing is safe."""
+    running = pids()
+    if not running:
+        return None
     p = ping()
-    if p and p.get("career_loaded") and not allow_career:
-        sys.exit("career loaded: refusing to kill (pass --allow-career after checking nothing is unsaved)")
-    for pid in pids():
-        subprocess.run(["kill", "-9", pid])
-    time.sleep(2)
+    if p is None:
+        return "game is running but the plugin does not answer: refusing to kill (close the game yourself)"
+    if p.get("career_loaded") and not (allow_career and agent_loaded(running)):
+        return "career loaded that this helper did not load: refusing to kill (owner may have unsaved progress)"
+    return None
+
+
+def clear_state() -> None:
     # A killed app triggers macOS's "reopen windows?" modal on next launch, which blocks before the loader.
     subprocess.run(["rm", "-rf", str(Path.home() / f"Library/Saved Application State/{BUNDLE_ID}.savedState")])
     subprocess.run(["defaults", "write", BUNDLE_ID, "ApplePersistenceIgnoreState", "-bool", "YES"])
+
+
+def kill(allow_career: bool) -> None:
+    reason = kill_refusal(allow_career)
+    if reason:
+        sys.exit(reason)
+    for pid in pids():
+        subprocess.run(["kill", "-9", pid])
+    time.sleep(2)
+    MARKER.unlink(missing_ok=True)
+    clear_state()
 
 
 def launch(timeout: float = 180, attempts: int = 3) -> dict:
@@ -56,7 +85,7 @@ def launch(timeout: float = 180, attempts: int = 3) -> dict:
             seen |= alive
             if seen and not alive:
                 print(f"launch {attempt}: game exited during startup, retrying")
-                kill(allow_career=True)  # nothing is loaded yet; clears the reopen-windows state
+                clear_state()  # process already exited; nothing to kill
                 break
     sys.exit("plugin did not come up")
 
@@ -69,6 +98,8 @@ def load_recent(timeout: float = 180) -> dict:
         panels = [p["panel_id"] for p in c.call("panels")]
         p = c.call("ping")
         if p["career_loaded"] and "PortalScreen" in panels:
+            MARKER.parent.mkdir(exist_ok=True)
+            MARKER.write_text(json.dumps({"pid": pids()[0] if pids() else None}))
             return p
         if "MainMenu" in panels and "LoadGameLoadingScreen" not in panels and time.time() - last_click > 15:
             try:
