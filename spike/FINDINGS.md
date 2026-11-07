@@ -101,3 +101,36 @@ Residual risk: unverified community binaries run inside the FM27 process with th
 - ~1 in 5 launches: SIGSEGV ~7–9 s after start in `libunwind setInfoBasedOnIPRegister ← PAL_VirtualUnwind ← DebugStackTrace::GetStackFramesInternal` (CoreCLR capturing a managed exception's stack trace through frames libunwind can't parse). Same signature with plugin 0.0.1-old and new → not caused by new ops. Reports: `~/Library/Logs/DiagnosticReports/Football Manager 27-2026-11-07-130758.ips`, `-133543.ips`.
 - Spike mitigation: `game.py launch` retries (process exits during startup → clear state → relaunch). Phase 1: find the thrown exception (first-chance handler log), avoid managed exceptions on IL2CPP-entered threads.
 - `load_recent` now re-clicks `LoadMostRecentSave` every 15 s (early clicks during the menu intro are ignored).
+
+## Verdict (2026-11-07, pre-release build 27.0.0.2493426, loader sptndc FM27-BepInEx arm64 2026-10-30 + locally rebuilt doorstop)
+
+| # | Criterion | Result | Evidence |
+|---|---|---|---|
+| 1 | BepInEx loader runs on macOS arm64, SIP on, original app untouched | **PASS** | `Chainloader startup complete`; `codesign --verify --deep --strict fm.app` valid before and after all tasks |
+| 2 | Read squad (≥3 attributes, contract, wage) | **PASS** | `check_squad.py` → `OK: 28 players, 28/28 matched save summary`, 4.1 s |
+| 3 | Read staff search | **PASS** | `check_staff.py` → `OK: 173/173 staff rows, 17 on-screen names all present`; wrong screen → `wrong-screen` |
+| 4 | Change one training session and verify | **PASS** | `check_training.py` → `OK: changed 17/0 Kondisi Fisik -> Istirahat -> Kondisi Fisik; calendar restored` |
+
+**Go for Phase 1.** No spec fallback needed (spec §9).
+
+Surprises:
+- Fully unattended loop works: restart game, load career, navigate, read, act (`game.py`) — the owner never touched the laptop for Tasks 3–5.
+- Reading is headless and screen-independent (fabricate → bind → poll), so most recommendation features need no UI navigation at all.
+- Actions go through the real UI by element name / binding path → language-neutral except option *labels*.
+- Two crash classes: (a) overwriting the loaded DLL — fixed; (b) intermittent startup crash in CoreCLR stack walking — open, retried.
+- Killed app → hidden macOS "reopen windows?" modal blocks the next launch — fixed by `ApplePersistenceIgnoreState`.
+
+Discovered names: see Task 3–5 sections (panels `StaffSearchReport`, `TrainingScreen`, `TrainingSessionSelectCard`, `MainMenu` tile `LoadMostRecentSave`; staff attributes without `Attribute` prefix; club `TransferBudget`, `MainTeam`, `HighestLevelYouthTeam`, `YouthTeam`, `PlayersOutOnLoan`).
+
+Phase 1 difficulty (first three features):
+| Feature | Read | Action | Estimate |
+|---|---|---|---|
+| F11 Staff search | done (all rows + 18 attributes + role) | `staff.offer`: open contract offer from staff row, read wage demand there, confirm — UI path still to map | medium |
+| F6 Transfer/scouting ranker | budget (`TransferBudget`) done; player search = same list-read route as staff search | shortlist/scout request/bid via UI — per-action mapping | medium–high (bids + negotiation counters) |
+| F10 Training | calendar read + single-slot change done | weekly apply = 21 single-slot changes or the schedule template picker; individual training not explored | low–medium |
+
+Open items for Phase 1: per-session WebSocket token; startup crash root cause; safe quit-to-menu path; map localized session/option labels to ids; staff wage demand source; goalkeeping/mental/youngsters/discipline staff attribute names.
+
+## Re-test after release
+
+Pending: FM27 full release is 2026-11-10. Re-run Task 1 Step 6, Task 2 Step 7, `check_squad.py`, `check_staff.py`, `check_training.py`, then the original-app signature check, and record results here per build.
