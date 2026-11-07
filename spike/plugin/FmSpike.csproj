@@ -26,6 +26,7 @@
     <Reference Include="SI.Core"><HintPath>$(InteropDir)/SI.Core.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="SI.Interop"><HintPath>$(InteropDir)/SI.Interop.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="SI.UI"><HintPath>$(InteropDir)/SI.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(InteropDir)/UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="FM.UI"><HintPath>$(InteropDir)/FM.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="FM.GamePlugin"><HintPath>$(InteropDir)/FM.GamePlugin.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>

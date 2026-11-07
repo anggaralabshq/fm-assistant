@@ -12,6 +12,9 @@ internal static class Ops
             case "ping": return Ping();
             case "prop_check": return Discover.PropCheck(args);
             case "tree": return Discover.TreeDump(args);
+            case "panels": return Ui.Panels(args);
+            case "ui_find": return Ui.Find(args);
+            case "ui_click_text": return Ui.ClickText(args);
             default: throw new OpException("unknown-op", op);
         }
     }
