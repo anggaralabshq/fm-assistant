@@ -58,3 +58,19 @@ Residual risk: unverified community binaries run inside the FM27 process with th
 - FM27 UI API change vs FM26: `PanelManager.RootVisualElement` gone; use `PanelManager.GetAllOpenPanels(List<SI.Bindable.Panel>)` (Panel : VisualElement). Op `panels` returns PanelID names, e.g. portal = `GameWorldBackground, OverviewTitleBar, PortalScreen, Watermark, GameVersion`; splash = `PhotosensitivityWarning_SplashScreen`.
 - **Owner's game language is Indonesian** → actions must target PanelIDs / element names, never English button text.
 - Closing the game: AppleScript quit is refused ("User canceled"), SIGTERM ignored; only SIGKILL works → acceptable only at main menu with no career. After a SIGKILL the next launch hung at "Chainloader initialized" until the owner relaunched. Phase 1 needs a safe "back to main menu / quit" path or leaves closing to the owner.
+
+## Task 3 — read squad (2026-11-07, build 27.0.0.2493426)
+
+- Op `squad` (club → `MainTeam` → `Team.Players` → per-player props → `FullContract` chained → `Wage/EndDate/ContractLength`): **28 players in 4.1 s**, batches of 20, one shared poll loop.
+- `check_squad.py`: **OK: 28 players, 28/28 matched save summary** (newest save, read-only via cli-anything-fm27 `save_info`). Non-ASCII names exact (`França`).
+- Save `squad_snapshot` uses short names (`K. Hirose`) and mixes in youth players (`S. Ramadhani` is in Java United U21) → checker matches initial+surname and looks in youth teams.
+- FM27 port notes vs fm-dof-mcp (FM26): `Bindings.Bind` now takes an owner object `(ref Key, Object owner, ValueChangedCallback)`; native `Bindings.Create` overloads still resolved by param count; attribute values land as digit strings inside a `PropertyValue` record → decoder coerces numeric strings.
+- Wage: `{"display": "Rp27Jt p/mgg", "sort": 1128}`. `sort` is not rupiah (likely the base currency); use `display` for the owner, `sort` only for ranking.
+- Generic op `read {ref: person|club|team|path, uid|path, props[]}` added for discovery without restarts. `Human.Club` → `TransferBudget: 239000`, `PlayersOutOnLoan` works.
+
+## Autonomous game control (2026-11-07)
+
+- Owner's macOS permission: **Screen Recording** (screencapture works now; Accessibility not granted).
+- After a SIGKILL, macOS shows a hidden "reopen windows?" modal (`NSPersistentUIRestorer promptToIgnorePersistentStateWithCrashHistory`) that blocks the next launch before `il2cpp_init` — the cause of the earlier "hang". Fix: delete `~/Library/Saved Application State/com.SportsInteractive.FootballManager27.savedState` and `defaults write com.SportsInteractive.FootballManager27 ApplePersistenceIgnoreState -bool YES`.
+- `spike/client/game.py restart --load`: kill → clear state → `open steam://rungameid/4530370` → wait for plugin → click `LoadMostRecentSave` (MainMenu, language-neutral element name) → career loaded. Full cycle ~1.5 min, no owner input. Refuses to kill a loaded career unless `--allow-career` (caller checks in-game date == save date first; agent never saves).
+- New UI ops: `ui_dump {panel, depth, max}` (element tree: name/type/text/bounds), `ui_click {name, panel, index}`.

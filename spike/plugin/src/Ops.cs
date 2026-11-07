@@ -15,6 +15,8 @@ internal static class Ops
             case "panels": return Ui.Panels(args);
             case "ui_find": return Ui.Find(args);
             case "ui_click_text": return Ui.ClickText(args);
+            case "ui_dump": return Ui.Dump(args);
+            case "ui_click": return Ui.ClickName(args);
             default: throw new OpException("unknown-op", op);
         }
     }

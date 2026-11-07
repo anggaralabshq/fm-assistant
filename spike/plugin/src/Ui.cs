@@ -104,6 +104,12 @@ internal static class Ui
             if (m) { hit = n; hitText = t; }
         });
         if (hit == null) throw new OpException("ui-element-missing", $"no visible text '{needle}'; seen: {string.Join(" | ", seen)}");
+        Click(hit);
+        return Row(hit, hitText);
+    }
+
+    private static void Click(VisualElement hit)
+    {
         var pos = hit.worldBound.center;
         var down = PointerDownEvent.GetPooled();
         down.position = pos; down.localPosition = pos; down.button = 0; down.pressedButtons = 1; down.clickCount = 1;
@@ -111,6 +117,65 @@ internal static class Ui
         var up = PointerUpEvent.GetPooled();
         up.position = pos; up.localPosition = pos; up.button = 0; up.pressedButtons = 0; up.clickCount = 1;
         hit.SendEvent(up);
-        return Row(hit, hitText);
+    }
+
+    private static string TypeName(VisualElement n)
+    {
+        try { return n.GetIl2CppType().Name; } catch { return "?"; }
+    }
+
+    /// {"panel":"PortalScreen", "depth":12, "max":400} -> visible element tree {name,type,text,x,y,w,h,children}. Language-neutral discovery.
+    public static JsonNode Dump(JsonObject args)
+    {
+        var id = (string)args["panel"];
+        var depth = (int?)args["depth"] ?? 12;
+        var budget = (int?)args["max"] ?? 400;
+        var roots = new JsonArray();
+        foreach (var p in OpenPanels())
+        {
+            string pid = null; try { pid = p.PanelID?.name; } catch { }
+            if (id != null && pid != id) continue;
+            roots.Add(DumpNode(p, depth, ref budget));
+        }
+        if (roots.Count == 0) throw new OpException("wrong-screen", $"panel '{id}' not open");
+        return roots;
+    }
+
+    private static JsonObject DumpNode(VisualElement n, int depth, ref int budget)
+    {
+        budget--;
+        var o = Row(n, OwnText(n));
+        o["type"] = TypeName(n);
+        if (depth > 0 && n.childCount > 0)
+        {
+            var kids = new JsonArray();
+            for (int i = 0; i < n.childCount; i++)
+            {
+                var c = n[i];
+                if (!Visible(c)) continue;
+                if (budget <= 0) { kids.Add("…truncated"); break; }
+                kids.Add(DumpNode(c, depth - 1, ref budget));
+            }
+            if (kids.Count > 0) o["children"] = kids;
+        }
+        return o;
+    }
+
+    /// {"name":"ContinueButton", "panel":"PortalScreen"?, "index":0} -> click the visible element with that name (language-neutral).
+    public static JsonNode ClickName(JsonObject args)
+    {
+        var name = (string)args["name"] ?? throw new OpException("bad-request", "name required");
+        var id = (string)args["panel"];
+        var index = (int?)args["index"] ?? 0;
+        var hits = new List<VisualElement>();
+        foreach (var p in OpenPanels())
+        {
+            string pid = null; try { pid = p.PanelID?.name; } catch { }
+            if (id != null && pid != id) continue;
+            Walk(p, 0, n => { if (n.name == name && Visible(n)) hits.Add(n); });
+        }
+        if (hits.Count <= index) throw new OpException("ui-element-missing", $"'{name}' visible matches: {hits.Count}");
+        Click(hits[index]);
+        return Row(hits[index], OwnText(hits[index]));
     }
 }

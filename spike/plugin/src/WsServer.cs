@@ -14,6 +14,7 @@ internal sealed class WsServer
 {
     private const int MaxMessageBytes = 256 * 1024;
     private static readonly TimeSpan JobTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan SlowOpTimeout = TimeSpan.FromSeconds(90);
     private readonly int _port;
     private HttpListener _listener;
 
@@ -80,9 +81,11 @@ internal sealed class WsServer
             id = (string)req["id"];
             op = (string)req["op"] ?? throw new OpException("bad-request", "missing op");
             var args = req["args"] as JsonObject ?? new JsonObject();
-            var job = Plugin.Queue.Run(() => Ops.Dispatch(op, args));
-            if (await Task.WhenAny(job, Task.Delay(JobTimeout)) != job)
-                throw new OpException("main-thread-timeout", $"{op} did not run within {JobTimeout.TotalSeconds}s");
+            // Multi-frame ops orchestrate their own main-thread hops; the rest run as one main-thread job.
+            var job = op switch { "squad" => Squad.Run(args), "read" => GenericRead.Run(args), _ => Plugin.Queue.Run(() => Ops.Dispatch(op, args)) };
+            var limit = op is "squad" or "read" ? SlowOpTimeout : JobTimeout;
+            if (await Task.WhenAny(job, Task.Delay(limit)) != job)
+                throw new OpException("main-thread-timeout", $"{op} did not finish within {limit.TotalSeconds}s");
             return new JsonObject { ["id"] = id, ["ok"] = true, ["result"] = await job };
         }
         catch (Exception e)
