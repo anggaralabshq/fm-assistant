@@ -135,6 +135,8 @@ internal static class Reader
         return true;
     }
 
+    private static readonly string[] RecordProbe = { "JobString", "Name", "Text", "Value", "Job", "Role" };
+
     private static uint Id(string name) => PropertyIdentifierSet.Instance.GetID(Il2CppSystem.MemoryExtensions.AsSpan(name)).ID;
 
     /// TypedValue -> JSON. Order: entity ref, date, record (PropertyValue / DisplayValue+SortValue), list, string/number.
@@ -171,7 +173,11 @@ internal static class Reader
                         if (rec.TryGetValue(Id("SortValue"), out var sv) && sv != null) node["sort"] = Decode(sv, depth + 1);
                         return node;
                     }
-                    return new JsonObject { ["$record"] = type, ["count"] = rec.Count };
+                    // Unknown record shape: probe a few common keys (TryGetValue only, never enumerate).
+                    var probed = new JsonObject { ["$record"] = type, ["count"] = rec.Count };
+                    foreach (var k in RecordProbe)
+                        if (rec.TryGetValue(Id(k), out var kv) && kv != null) probed[k] = Decode(kv, depth + 1);
+                    return probed;
                 }
             }
             catch { }

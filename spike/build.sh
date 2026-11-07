@@ -8,5 +8,7 @@ DOTNET="${DOTNET:-$HOME/.dotnet/dotnet}"
 "$DOTNET" build "$HERE/plugin/FmSpike.csproj" -c Release -nologo -v q \
   -p:CoreDir="$FM27_BEP/core" -p:InteropDir="$FM27_BEP/interop"
 mkdir -p "$FM27_BEP/plugins/FmSpike"
-cp "$HERE/plugin/bin/Release/net6.0/FmSpike.dll" "$FM27_BEP/plugins/FmSpike/"
+# Never overwrite in place: a running game has the DLL mmapped and crashes on the next JIT. Rename = new inode.
+cp "$HERE/plugin/bin/Release/net6.0/FmSpike.dll" "$FM27_BEP/plugins/FmSpike/FmSpike.dll.new"
+mv -f "$FM27_BEP/plugins/FmSpike/FmSpike.dll.new" "$FM27_BEP/plugins/FmSpike/FmSpike.dll"
 echo "Installed: $FM27_BEP/plugins/FmSpike/FmSpike.dll"

@@ -15,7 +15,7 @@ internal static class Ui
     private static readonly Regex Tags = new Regex(@"</?[a-zA-Z][^<>]{0,150}>", RegexOptions.Compiled);
 
     /// Every open panel (FM27: PanelManager has no single RootVisualElement; Panel : VisualElement).
-    private static List<Panel> OpenPanels()
+    public static List<Panel> OpenPanels()
     {
         PanelManager pm = null;
         try { pm = ManualSingleton<PanelManager>.Instance; } catch { }
@@ -119,6 +119,20 @@ internal static class Ui
         hit.SendEvent(up);
     }
 
+    /// Binding path behind an SIText (e.g. a property name), null when not a direct binding. Discovery aid.
+    private static string BindPath(VisualElement n)
+    {
+        try
+        {
+            var t = n.TryCast<SIText>();
+            if (t == null) return null;
+            var m = t.m_textBinding;
+            var path = m.Direct.Path.Path;
+            return string.IsNullOrEmpty(path) ? $"<{m.Kind}>" : path;
+        }
+        catch { return null; }
+    }
+
     private static string TypeName(VisualElement n)
     {
         try { return n.GetIl2CppType().Name; } catch { return "?"; }
@@ -146,6 +160,8 @@ internal static class Ui
         budget--;
         var o = Row(n, OwnText(n));
         o["type"] = TypeName(n);
+        var bind = BindPath(n);
+        if (bind != null) o["bind"] = bind;
         if (depth > 0 && n.childCount > 0)
         {
             var kids = new JsonArray();

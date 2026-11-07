@@ -74,3 +74,14 @@ Residual risk: unverified community binaries run inside the FM27 process with th
 - After a SIGKILL, macOS shows a hidden "reopen windows?" modal (`NSPersistentUIRestorer promptToIgnorePersistentStateWithCrashHistory`) that blocks the next launch before `il2cpp_init` — the cause of the earlier "hang". Fix: delete `~/Library/Saved Application State/com.SportsInteractive.FootballManager27.savedState` and `defaults write com.SportsInteractive.FootballManager27 ApplePersistenceIgnoreState -bool YES`.
 - `spike/client/game.py restart --load`: kill → clear state → `open steam://rungameid/4530370` → wait for plugin → click `LoadMostRecentSave` (MainMenu, language-neutral element name) → career loaded. Full cycle ~1.5 min, no owner input. Refuses to kill a loaded career unless `--allow-career` (caller checks in-game date == save date first; agent never saves).
 - New UI ops: `ui_dump {panel, depth, max}` (element tree: name/type/text/bounds), `ui_click {name, panel, index}`.
+
+## Task 4 — Staff Search (2026-11-07, build 27.0.0.2493426)
+
+- Screen: panel id **`StaffSearchReport`**; table `StreamedTable 'nonplayertable'`, columns `default-selection-column, status, non-player, clubjob, preferredjob, club, club-division, rating`. Reached via KLUB → Staf → "Database Staf / Seluruh dunia" tile (spike navigates by Indonesian text; Phase 1 must use ids).
+- `StreamedListView.SourceData` / `ListElement.Items` are public in FM27 (no reflection) → **all 173 rows**, not just the 17 rendered.
+- `check_staff.py`: **OK: 173/173 staff rows, 17 on-screen names all present**; Squad screen → `wrong-screen: expected StaffSearchReport, got …SquadScreen…`.
+- **Staff attribute property names have no `Attribute` prefix** (player ones do): `Attacking, Defending, Tactical, Technical, SetPieces, CoachingFitness, TacticalKnowledge, JudgingPlayerAbility, JudgingPlayerPotential, JudgingStaffAbility, PeopleManagement, Motivating, Adaptability, Determination, Physiotherapy, SportsScience, Negotiating, AnalysingData` (1–20). Not found yet: goalkeeping coaching, mental coaching, working with youngsters, discipline.
+- `PreferredJob` → record with `JobString` (e.g. "Analis Performa", localized). Wage demand is not in the search view → `wage_demand: null`; Phase 1 reads it from the contract offer screen.
+- Discovery aids: `ui_dump` now reports each SIText's binding path (`bind`), `list_rows` reports table column ids, `read` takes `chain: {prop: [subprops]}`.
+- **Crash found + fixed:** overwriting `FmSpike.dll` in place while the game runs crashes it on the next JIT (SIGSEGV in `SignatureNative::GetSignature`; the file is mmapped). `build.sh` now copies to `.new` and renames.
+- Main menu `squad` → `no-career-loaded: load a career first` (Task 3 Step 4 check).

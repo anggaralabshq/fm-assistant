@@ -92,6 +92,17 @@ internal static class GenericRead
             _ => throw new OpException("bad-request", "ref must be person|club|team|path"),
         };
         var plant = (await Reader.ReadMany(new List<Func<TypedValue>> { parent }, props, (int?)args["wait_ms"] ?? 4000))[0];
-        return await Reader.Main(() => { var j = Reader.Collect(plant); Reader.Close(plant); return j; });
+        var json = await Reader.Main(() => Reader.Collect(plant));
+        // "chain": {"FullContract": ["Wage", ...]} reads sub-props off a landed value.
+        if (args["chain"] is JsonObject chain)
+            foreach (var kv in chain)
+            {
+                var v = plant.Props.Find(x => x.Name == kv.Key)?.Value;
+                var sub = (kv.Value as JsonArray)?.Select(n => (string)n).ToArray() ?? Array.Empty<string>();
+                var cp = (await Reader.ReadMany(new List<Func<TypedValue>> { () => v }, sub))[0];
+                json[kv.Key] = await Reader.Main(() => { var j = Reader.Collect(cp); Reader.Close(cp); return j; });
+            }
+        await Reader.Main(() => { Reader.Close(plant); return 0; });
+        return json;
     }
 }

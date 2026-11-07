@@ -17,6 +17,7 @@ internal static class Ops
             case "ui_click_text": return Ui.ClickText(args);
             case "ui_dump": return Ui.Dump(args);
             case "ui_click": return Ui.ClickName(args);
+            case "list_rows": return ListRead.Op(args);
             default: throw new OpException("unknown-op", op);
         }
     }
