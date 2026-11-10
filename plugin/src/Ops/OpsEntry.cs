@@ -55,5 +55,7 @@ internal static class OpsEntry
         ["act_staff_approach"] = (Exclusive(Act.Gated("act_staff_approach", Act.StaffApproachOp)), 60),
         ["act_staff_offer"] = (Exclusive(Act.Gated("act_staff_offer", Act.StaffOfferOp)), 60),
         ["act_scout_request"] = (Exclusive(Act.Gated("act_scout_request", Act.ScoutRequestOp)), 60),
+        ["act_training_focus"] = (Exclusive(Act.Gated("act_training_focus", Act.TrainingFocusOp)), 60),
+        ["act_training_sessions"] = (Exclusive(Act.Gated("act_training_sessions", Act.TrainingSessionsOp)), 120),
     };
 }

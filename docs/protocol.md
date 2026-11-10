@@ -373,6 +373,8 @@ contract after promises).
 | `act_scout_request` | `uid`, `scout_uid`, `duration=week\|month\|full` | `{verified, answer: "pending"\|"already", before: {being_scouted}, after, performed}`; the scout must be one the action lists | ~10 s |
 | `act_staff_approach` | `uid` (non-player) | `{verified, negotiation, demand: {job, wage, end_date}}`; the prefilled terms are the demand | ~10–13 s |
 | `act_staff_offer` | `uid`, `wage` (base currency) | `{verified, offered: {wage, job, event}, answer, counter, patience, before, after}` | ~19 s |
+| `act_training_sessions` | `changes: [{date, slot (0–2), session_type}]` (1–21) | `{verified, changes: [{date, slot, before, after, target}]}` | ~5 s per change |
+| `act_training_focus` | `uid`, `type_row` (option value, `-1` = none) | `{verified, before: {type_row}, after, answer?}` | ~5–6 s |
 
 Op details:
 
@@ -382,6 +384,13 @@ Op details:
   finalize when the terms equal the demand). `answer`: `accepted` (now employed by the human club), `rejected`
   (patience 0, or the screen closed without read-only), `countered` (the reply rewrote the wage or the base terms;
   `counter` has the new terms), `pending` (read-only). A counter is never answered.
+- `act_training_sessions`: dates as `YYYY-MM-DD` within the month the training screen shows; past days, match slots
+  and session types with no known name → `precondition`. Each change opens the slot's session card, checks the
+  card's date and slot, picks the option by the game's own session name, and confirms; the final calendar must
+  show every target, else `verified` false. Session names (type → localized name) are learned from every calendar
+  read and kept in `~/.fm-assistant/training_names.json`, so a replaced type can be set back.
+- `act_training_focus` sets the first-team player's individual additional focus on `TeamIndividualTrainingTool`;
+  the option must be one the game offers that player.
 
 Negotiation = `{open, on_screen, stage, wage, job, end_date, board_max_wage, wage_over_board_max, patience: {status,
 value}, changed_by_other_party, read_only, key_info: [text]}`, read headless from `Person.ContractEditSession`

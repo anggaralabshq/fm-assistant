@@ -778,4 +778,405 @@ internal static class Act
         var club = await Reader.Main(() => FmAssistant.Tree.HumanClubUid(), ct);
         return (o["Club"] as JsonObject)?["uid"].Int() == club;
     }
+
+    // ------------------------------------------------------------------ F10: training sessions and individual focus
+
+    private const string Card = "TrainingSessionSelectCard";
+
+    /// The calendar's dates: the unique run of consecutive dates through today whose day-of-month sequence equals
+    /// the calendar's day numbers (port of fm_assistant.training.assign_dates).
+    internal static List<System.DateTime> AssignDates(List<int> days, System.DateTime today)
+    {
+        var fits = new List<System.DateTime>();
+        for (var i = 0; i < days.Count; i++)
+        {
+            if (days[i] != today.Day) continue;
+            var start = today.AddDays(-i);
+            if (Enumerable.Range(0, days.Count).All(k => start.AddDays(k).Day == days[k])) fits.Add(start);
+        }
+        if (fits.Count != 1) throw new OpException("ui-element-missing", $"{fits.Count} date runs through today match the calendar's day numbers");
+        return Enumerable.Range(0, days.Count).Select(k => fits[0].AddDays(k)).ToList();
+    }
+
+    private sealed class Calendar { public System.DateTime Today; public List<System.DateTime> Dates; public JsonArray Days; }
+
+    /// type -> the game's own (localized) session name, the only way to identify the card's options. Learned from every
+    /// calendar this op reads and kept in ~/.fm-assistant/training_names.json, so a type that left the calendar
+    /// (the one a change replaced) can still be set back. A name seen now replaces a stored one (language change).
+    private static string NamesFile => Path.Combine(Session.Dir, "training_names.json");
+
+    private static Dictionary<int, string> SessionNames(Calendar cal)
+    {
+        var names = new Dictionary<int, string>();
+        try
+        {
+            if (File.Exists(NamesFile) && JsonNode.Parse(File.ReadAllText(NamesFile)) is JsonObject o)
+                foreach (var kv in o) if (int.TryParse(kv.Key, out var t) && kv.Value is JsonValue v) names[t] = v.ToString();
+        }
+        catch { }
+        var seen = new Dictionary<int, string>();
+        foreach (var d in cal.Days)
+            for (var k = 0; k < 3; k++)
+            {
+                var t = d["session_types"][k].Int();
+                if (t != null && d["sessions"][k] is JsonValue) seen.TryAdd(t.Value, (string)d["sessions"][k]);
+            }
+        foreach (var kv in seen) names[kv.Key] = kv.Value;
+        try
+        {
+            var outObj = new JsonObject();
+            foreach (var kv in names.OrderBy(x => x.Key)) outObj[kv.Key.ToString()] = kv.Value;
+            var tmp = NamesFile + ".tmp";
+            File.WriteAllText(tmp, outObj.ToJsonString());
+            File.Move(tmp, NamesFile, true);
+        }
+        catch { }
+        return names;
+    }
+
+    private static async Task<Calendar> ReadCalendar(CancellationToken ct)
+    {
+        var cal = (JsonObject)await Training.Read(new JsonObject(), ct);
+        var today = System.DateTime.ParseExact((string)cal["today"], "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var days = (JsonArray)cal["days"];
+        var nums = days.Select(d => d["day_of_month"].Int() ?? -1).ToList();
+        return new Calendar { Today = today, Dates = AssignDates(nums, today), Days = days };
+    }
+
+    /// Main thread. The session-select card's binding node (a root child holding trainingsessiontype and Date).
+    private static IReadOnlyNode CardNode()
+    {
+        foreach (var c in Plugin.Bindings.RootNode.Children)
+        {
+            if (c.FirstChild == null) continue;
+            bool type = false, date = false;
+            foreach (var k in c.Children) { var n = FmAssistant.Tree.Name(k); type |= n == "trainingsessiontype"; date |= n == "Date"; }
+            if (type && date) return c;
+        }
+        return null;
+    }
+
+    /// Main thread. {type, date, slot} of the open session card, read from its binding node.
+    internal static R<(int Type, string Date, int Slot)> CardState()
+    {
+        if (!Ui.IsOpen(Card)) return R<(int, string, int)>.Err("ui-element-missing", $"{Card} is not open");
+        var node = CardNode();
+        if (node == null) return R<(int, string, int)>.Err("ui-element-missing", "session card binding node not found");
+        int type = int.MinValue, slot = int.MinValue; string date = null;
+        foreach (var k in node.Children)
+        {
+            var n = FmAssistant.Tree.Name(k);
+            if (n == "trainingsessiontype") type = IntOf(k.Value);
+            else if (n == "TrainingSessionDayIndex") slot = IntOf(k.Value);
+            else if (n == "Date") date = Reader.Decode(k.Value) as JsonValue is { } jv ? jv.ToString() : null;
+        }
+        return (type, date, slot);
+    }
+
+    /// Main thread. Clicks calendar day `day`, slot `slot` (its session-name cell, checked against the backing name).
+    private static R<bool> ClickSlot(int day, int slot, string name)
+    {
+        var lists = ListRead.Widgets(Training.Panel).Where(w => w.name == "EventsList").ToList();
+        if (day >= lists.Count) return R<bool>.Err("ui-element-missing", $"day {day} not on the calendar ({lists.Count} days)");
+        var cells = new List<UnityEngine.UIElements.VisualElement>();
+        Ui.Walk(lists[day], 0, n =>
+        {
+            var b = Ui.BindPath(n);
+            if ((b == "Event.SessionName" || b == "Event.TeamOpponent.AbbreviatedName") && Ui.Visible(n)) cells.Add(n);
+        });
+        cells = cells.OrderBy(c => c.worldBound.center.y).ToList();
+        if (slot >= cells.Count) return R<bool>.Err("ui-element-missing", $"day {day} shows {cells.Count} slots");
+        var cell = cells[slot];
+        if (Ui.BindPath(cell) != "Event.SessionName" || Ui.OwnText(cell) != name)
+            return R<bool>.Err("ui-element-missing", $"day {day} slot {slot} shows '{Ui.OwnText(cell)}', calendar says '{name}'");
+        Ui.Click(cell);
+        return true;
+    }
+
+    /// Main thread. The card's option radios (binding item.DisplayValue): categories = the top row (by x), options
+    /// below it (by y).
+    internal static (List<UnityEngine.UIElements.VisualElement> Cats, List<UnityEngine.UIElements.VisualElement> Opts) CardOptions()
+    {
+        var all = new List<UnityEngine.UIElements.VisualElement>();
+        var p = Ui.OpenPanels().Find(x => Ui.PanelId(x) == Card);
+        if (p != null) Ui.Walk(p, 0, n => { if (Ui.BindPath(n) == "item.DisplayValue" && Ui.Visible(n)) all.Add(n); });
+        if (all.Count == 0) return (all, all);
+        var top = all.Min(e => e.worldBound.center.y);
+        return (all.Where(e => e.worldBound.center.y <= top + 5).OrderBy(e => e.worldBound.center.x).ToList(),
+            all.Where(e => e.worldBound.center.y > top + 5).OrderBy(e => e.worldBound.center.y).ToList());
+    }
+
+    private static R<bool> ClickCard(string name)
+    {
+        var p = Ui.OpenPanels().Find(x => Ui.PanelId(x) == Card);
+        UnityEngine.UIElements.VisualElement hit = null;
+        if (p != null) Ui.Walk(p, 0, n => { if (hit == null && n.name == name && Ui.Visible(n)) hit = n; });
+        if (hit == null) return R<bool>.Err("ui-element-missing", $"{name} not in {Card}");
+        Ui.Click(hit);
+        return true;
+    }
+
+    /// Main thread. The session the card has selected: its trainingsession.Name text.
+    private static string CardSelected()
+    {
+        var p = Ui.OpenPanels().Find(x => Ui.PanelId(x) == Card);
+        string t = null;
+        if (p != null) Ui.Walk(p, 0, n => { if (t == null && Ui.BindPath(n) == "trainingsession.Name" && Ui.Visible(n)) t = Ui.OwnText(n); });
+        return t;
+    }
+
+    /// With the card open: selects the option showing `name` (the calendar's own name for the target session type,
+    /// so game text is matched with game text). The card offers different options per day, and its binding node
+    /// keeps the slot's original type until confirm, so options cannot be matched by position or read back by type.
+    /// Category target / 100 is tried first, then the others.
+    private static async Task<bool> PickByName(int target, string name, CancellationToken ct)
+    {
+        if (await Reader.Main(CardSelected, ct) == name) return true;
+        var cats = (await Reader.Main(CardOptions, ct)).Cats.Count;
+        foreach (var c in Enumerable.Range(0, cats).OrderBy(c => c == target / 100 ? -1 : c))
+        {
+            await Reader.MainR(() => { var (cs, _) = CardOptions(); if (c >= cs.Count) return R<bool>.Err("ui-element-missing", "category"); Ui.Click(cs[c]); return true; }, ct);
+            await Task.Delay(500, ct);
+            var clicked = await Reader.Main(() =>
+            {
+                var hit = CardOptions().Opts.Find(e => Ui.OwnText(e) == name);
+                if (hit == null) return false;
+                Ui.Click(hit);
+                return true;
+            }, ct);
+            if (!clicked) continue;
+            await Task.Delay(400, ct);
+            return await Reader.Main(CardSelected, ct) == name;
+        }
+        return false;
+    }
+
+    private static async Task CancelCard()
+    {
+        try
+        {
+            if (await Reader.Main(() => Ui.IsOpen(Card), CancellationToken.None))
+                await Reader.Main(() => ClickCard("cancel"), CancellationToken.None);
+        }
+        catch { }
+    }
+
+    /// {changes: [{date: YYYY-MM-DD, slot: 0-2, session_type}] (1-21), apply_token} -> {verified, changes: [{date, slot, before, after}]}.
+    /// Each slot goes through the game's session card (click the slot, pick the option, confirm).
+    public static async Task<JsonNode> TrainingSessionsOp(JsonObject a, CancellationToken ct)
+    {
+        if (a["changes"] is not JsonArray arr || arr.Count < 1 || arr.Count > 21) throw new OpException("bad-request", "changes: 1-21 items required");
+        var changes = new List<(string Date, int Slot, int Type)>();
+        foreach (var n in arr)
+        {
+            if (n is not JsonObject c) throw new OpException("bad-request", "changes[] must be objects");
+            var date = Meta.Str(c, "date", required: true);
+            if (!System.DateTime.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _))
+                throw new OpException("bad-request", $"date must be YYYY-MM-DD: {date}");
+            var slot = Meta.Int(c, "slot", -1);
+            if (slot < 0 || slot > 2) throw new OpException("bad-request", "slot must be 0-2");
+            if (c["session_type"] is not JsonValue) throw new OpException("bad-request", "session_type required");
+            changes.Add((date, slot, Meta.Int(c, "session_type", 0)));
+        }
+        await Career(ct);
+        await Reader.MainR(Nav.OnGameScreens, ct);
+        var cal = await ReadCalendar(ct);
+        var names = SessionNames(cal);
+        var plan = new List<(string Date, int Slot, int Type, int Day, int? Before, string Name)>();
+        foreach (var (date, slot, type) in changes)
+        {
+            var day = cal.Dates.FindIndex(d => d.ToString("yyyy-MM-dd") == date);
+            if (day < 0) throw new OpException("precondition", $"{date} is not on the training calendar");
+            if (cal.Dates[day] < cal.Today) throw new OpException("precondition", $"{date} is in the past");
+            var before = cal.Days[day]["session_types"][slot].Int();
+            if (before == null) throw new OpException("precondition", $"{date} slot {slot} is a match");
+            if (before != type && !names.ContainsKey(type))
+                throw new OpException("precondition", $"session type {type} appears nowhere on the calendar, so its option cannot be identified; set it in the game");
+            plan.Add((date, slot, type, day, before, (string)cal.Days[day]["sessions"][slot]));
+        }
+        foreach (var (date, slot, type, day, before, _) in plan)
+        {
+            if (before == type) continue;
+            var now = await ReadCalendar(ct);   // names shift after each change; click by the current backing name
+            var name = (string)now.Days[day]["sessions"][slot];
+            try
+            {
+                await Reader.MainR(() => ClickSlot(day, slot, name), ct);
+                if (!await Until(() => Reader.Main(() => Ui.IsOpen(Card), ct), x => x, 4000, ct)) throw new OpException("ui-element-missing", $"{Card} did not open");
+                await Task.Delay(600, ct);
+                var st = await Reader.MainR(CardState, ct);
+                if (st.Date != date || st.Slot != slot) throw new OpException("ui-element-missing", $"card opened for {st.Date} slot {st.Slot}, wanted {date} slot {slot}");
+                if (!await PickByName(type, names[type], ct)) throw new OpException("precondition", $"session type {type} is not offered for {date} slot {slot}");
+                await Reader.MainR(() => ClickCard("confirm"), ct);
+                var t0 = Environment.TickCount64;
+                if (await Until(() => Reader.Main(() => Ui.IsOpen(Card), ct), x => !x, 8000, ct))
+                    throw new OpException("ui-element-missing", $"{Card} did not close {Environment.TickCount64 - t0} ms after confirm");
+                await Task.Delay(500, ct);
+            }
+            catch
+            {
+                await CancelCard();
+                throw;
+            }
+        }
+        var end = await ReadCalendar(ct);
+        var res = new JsonArray();
+        var ok = true;
+        foreach (var (date, slot, type, day, before, _) in plan)
+        {
+            var after = end.Days[day]["session_types"][slot].Int();
+            ok &= after == type;
+            res.Add(new JsonObject { ["date"] = date, ["slot"] = slot, ["before"] = before, ["after"] = after, ["target"] = type });
+        }
+        return new JsonObject { ["verified"] = ok, ["changes"] = res };
+    }
+
+    private const string FocusTool = "TeamIndividualTrainingTool";
+    private const string FocusToolGuid = "41012275212b88b46957d71fc17c5876";
+
+    /// {row, rows: [SortValue of each PossibleIndividualTrainingTypes entry], can_edit}: person PlayerTraining
+    /// (ctx human, team) -> AdditionalFocus (ctx Judge = Human). Row -1 = no focus.
+    private static async Task<(int Row, List<int> Rows, bool CanEdit)> Focus(int uid, CancellationToken ct)
+    {
+        var ctx = Ctx(("human", () => Path_("Human")), ("team", () => Path_("Human.Team")), ("Judge", () => Path_("Human")));
+        await using var scope = new ReadScope(ct);
+        var p = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { "PlayerTraining" }, 2500, ctx);
+        var pt = p["PlayerTraining"]?.Value ?? throw new OpException("binding-api-changed", "person PlayerTraining did not resolve");
+        var fp = await scope.ReadOne(() => pt, new[] { "AdditionalFocus" }, 3000, ctx);
+        var f = (await scope.Collect(new List<Plant> { fp }))[0]["AdditionalFocus"] as JsonObject
+            ?? throw new OpException("binding-api-changed", "PlayerTraining.AdditionalFocus did not resolve");
+        var rows = (f["PossibleIndividualTrainingTypes"] as JsonArray)?.Select(x => x?["SortValue"].Int() ?? int.MinValue).ToList() ?? new List<int>();
+        return (f["IndividualTrainingTypeRow"].Int() ?? int.MinValue, rows, Str(f["CanEdit"]) == "True");
+    }
+
+    /// Main thread. The individual training tool's binding node (root child named after its PanelID GUID).
+    private static IReadOnlyNode FocusNode()
+    {
+        foreach (var c in Plugin.Bindings.RootNode.Children) if (FmAssistant.Tree.Name(c).StartsWith(FocusToolGuid)) return c;
+        return null;
+    }
+
+    /// Main thread. uid of the tool's selectedplayer, or null.
+    private static int? FocusSelected()
+    {
+        var node = FocusNode();
+        if (node == null) return null;
+        foreach (var k in node.Children)
+            if (FmAssistant.Tree.Name(k) == "selectedplayer") return (Reader.Decode(k.Value) as JsonObject)?["uid"].Int();
+        return null;
+    }
+
+    /// Main thread. The player table's source index of uid, its row count, or an error.
+    private static R<(int Index, int Count)> FocusRow(int uid)
+    {
+        var w = ListRead.Widgets(FocusTool);
+        if (w.Count == 0) return R<(int, int)>.Err("ui-element-missing", $"{FocusTool} has no player table");
+        var rows = ListRead.Rows(w[0], 200);
+        var i = rows.Select(r => (r as JsonObject)?["uid"].Int()).ToList().IndexOf(uid);
+        if (i < 0) return R<(int, int)>.Err("precondition", $"person {uid} is not in the first team's individual training list");
+        return (i, rows.Count);
+    }
+
+    /// Main thread. The visible rows of the open dropdown menu (UI root's FloatingElement), in menu order.
+    private static List<UnityEngine.UIElements.VisualElement> MenuRows()
+    {
+        var res = new List<UnityEngine.UIElements.VisualElement>();
+        foreach (var p in Ui.OpenPanels())
+        {
+            UnityEngine.UIElements.VisualElement root = null;
+            try { root = p.panel?.visualTree; } catch { }
+            if (root == null) continue;
+            UnityEngine.UIElements.VisualElement fl = null;
+            Ui.Walk(root, 0, n => { if (fl == null && n.name == "FloatingElement") fl = n; });
+            if (fl != null) Ui.Walk(fl, 0, n =>
+            {
+                if (!Ui.Visible(n)) return;
+                string t = null; try { t = n.GetIl2CppType().Name; } catch { }
+                if (t == "DropdownRow") res.Add(n);
+            });
+            break;
+        }
+        return res.OrderBy(e => e.worldBound.center.y).ToList();
+    }
+
+    /// Main thread. The focus dropdown (SIDropdown inside the tool's element "focus").
+    private static R<bool> ClickFocusDropdown()
+    {
+        var p = Ui.OpenPanels().Find(x => Ui.PanelId(x) == FocusTool);
+        UnityEngine.UIElements.VisualElement box = null, hit = null;
+        if (p != null) Ui.Walk(p, 0, n => { if (box == null && n.name == "focus" && Ui.Visible(n)) box = n; });
+        if (box != null) Ui.Walk(box, 0, n => { if (hit == null && n.TryCast<SIDropdown>() != null && Ui.Visible(n)) hit = n; });
+        if (hit == null) return R<bool>.Err("ui-element-missing", $"focus dropdown not in {FocusTool}");
+        Ui.Click(hit);
+        return true;
+    }
+
+    /// {uid, type_row (-1 = none), apply_token} -> {verified, before: {type_row}, after: {type_row}, answer?}.
+    /// Picks the option by its index in the game's PossibleIndividualTrainingTypes (the dropdown's own order).
+    public static async Task<JsonNode> TrainingFocusOp(JsonObject a, CancellationToken ct)
+    {
+        var uid = Uid(a);
+        if (a["type_row"] is not JsonValue) throw new OpException("bad-request", "type_row required (-1 = none)");
+        var target = Meta.Int(a, "type_row", 0);
+        await Career(ct);
+        var before = await Focus(uid, ct);
+        if (!before.CanEdit) throw new OpException("precondition", "the game does not let the manager edit this player's individual focus");
+        var index = before.Rows.IndexOf(target);
+        if (index < 0) throw new OpException("precondition", $"type_row {target} is not offered for this player (offered: {string.Join(",", before.Rows)})");
+        JsonObject Res(int b, int af, bool ok, string ans = null)
+        {
+            var o = new JsonObject { ["verified"] = ok, ["before"] = new JsonObject { ["type_row"] = b }, ["after"] = new JsonObject { ["type_row"] = af } };
+            if (ans != null) o["answer"] = ans;
+            return o;
+        }
+        if (before.Row == target) return Res(before.Row, before.Row, true, "already");
+        await Reader.MainR(Nav.OnGameScreens, ct);
+        if (!await Reader.Main(() => Ui.IsOpen(FocusTool), ct))
+        {
+            await Reader.MainR<bool>(() =>
+            {
+                var team = Path_("Human.Team");
+                if (team == null) return R<bool>.Err("no-career-loaded", "Human.Team missing");
+                ManualSingleton<PanelManager>.Instance.Open(new UnityEngine.AddressableAssets.AssetReferenceT<PanelID>(FocusToolGuid), "team", team, null, null, RebindMethod.None);
+                return true;
+            }, ct);
+            if (!await Until(() => Reader.Main(() => Ui.IsOpen(FocusTool), ct), x => x, 8000, ct)) throw new OpException("wrong-screen", $"{FocusTool} did not open");
+            await Task.Delay(1000, ct);
+        }
+        // Select the player's row with the table's own selection call; the view is sorted, so the source index is a
+        // first guess and the tool's selectedplayer node is the check.
+        var (guess, count) = await Reader.MainR(() => FocusRow(uid), ct);
+        var selected = false;
+        foreach (var i in Enumerable.Range(0, count).OrderBy(i => i == guess ? -1 : i))
+        {
+            await Reader.Main(() => { ListRead.Widgets(FocusTool)[0].SetListSelection(i); return 0; }, ct);
+            if (await Until(() => Reader.Main(FocusSelected, ct), x => x == uid, 600, ct) == uid) { selected = true; break; }
+        }
+        if (!selected) throw new OpException("ui-element-missing", $"could not select person {uid} in {FocusTool}");
+        await Task.Delay(500, ct);
+        var opened = false;
+        try
+        {
+            await Reader.MainR(ClickFocusDropdown, ct);
+            opened = true;
+            var n = await Until(() => Reader.Main(() => MenuRows().Count, ct), x => x == before.Rows.Count, 3000, ct);
+            if (n != before.Rows.Count) throw new OpException("ui-element-missing", $"focus menu shows {n} rows, the game offers {before.Rows.Count}");
+            await Task.Delay(300, ct);
+            await Reader.MainR<bool>(() =>
+            {
+                var rows = MenuRows();
+                if (rows.Count != before.Rows.Count) return R<bool>.Err("ui-element-missing", "focus menu changed");
+                Ui.Click(rows[index]);
+                return true;
+            }, ct);
+            opened = false;
+        }
+        finally
+        {
+            if (opened && await Reader.Main(() => MenuRows().Count > 0, CancellationToken.None))
+                try { await Reader.MainR(ClickFocusDropdown, CancellationToken.None); } catch { }   // toggles the menu closed
+        }
+        var after = await Until(() => Focus(uid, ct), f => f.Row == target, 4000, ct);
+        return Res(before.Row, after.Row, after.Row == target);
+    }
 }
