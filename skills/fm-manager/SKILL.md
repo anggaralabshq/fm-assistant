@@ -142,7 +142,8 @@ Flow, every time:
 5. Report per action from the output: `status` (ok / failed / skipped), `answer`, and that `verified` is true.
    `failed` → quote `error.detail`; later actions were skipped. `precondition` = the action itself was not sent
    (talks may still be open on screen). `timeout` / `unavailable` → it may have happened: ask the owner to check
-   the game, then re-read. Partial → say exactly which actions (and which training changes) were done. Never say
+   the game, then re-read. Partial → say exactly which actions were done; a failed training action lists in `result.changes` the
+   changes already made (`after` = `target`). Never say
    done without `status: ok`.
 
 Per kind:
@@ -152,7 +153,8 @@ Per kind:
   `countered` with `counter` terms and `patience`. A counter is never answered automatically: quote it, give a new
   recommendation, new plan, new box.
 - Renewal: `contract.open_renewal` returns `demand` (`wage`, `loyalty_bonus`, `agent_fee`, `end_date`, `add_ons`
-  as name/value; `agent_fee: null` = see the game). Compare `wage` with the status's `advised_max` ("saran gaji
+  as name/value; `agent_fee` is the screen's text with `agent_fee_note` (e.g. "Tidak punya agen"), null = see the
+  game). Compare `wage` with the status's `advised_max` ("saran gaji
   untuk status X"). The `contract.offer_renewal` plan takes `wage` = `demand.wage.value` and `end_date` =
   `demand.end_date`; it sends those terms unchanged and refuses if the screen now shows other terms. Other terms =
   manual steps. `pending` = the player answers after the date advances (the owner presses Continue, never the

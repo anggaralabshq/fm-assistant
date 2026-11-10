@@ -217,3 +217,11 @@ def test_settings_ask_before_mcp_apply():
     from pathlib import Path
     s = json.loads((Path(__file__).parents[2] / "skills/fm-manager/settings.example.json").read_text())
     assert {"mcp__fm-assistant__apply", "Bash(fm --json apply*)", "Bash(fm apply*)"} <= set(s["permissions"]["ask"])
+
+
+def test_op_error_inside_unverified_result_is_reported(save):
+    # live: act_training_sessions stops at the first failing change and returns {verified: false, changes, error}
+    p = mkplan(("training.set_sessions", {"changes": [{"date": "2026-09-25", "slot": 1, "session_type": 9}]}))
+    err = {"code": "precondition", "detail": "session type 9 is not offered"}
+    r = apply.run(p["id"], Fake({"verified": False, "changes": [], "error": err}), HELLO)
+    assert r["actions"][0]["error"] == err and r["status"] == "failed"

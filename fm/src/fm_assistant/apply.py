@@ -58,7 +58,8 @@ def run(plan_id: str, client, hello: dict) -> dict:
                 if isinstance(res, dict) and res.get("verified") is True:
                     row.update(status="ok", result=res)
                 else:
-                    row.update(status="failed", result=res, error={"code": "not-verified", "detail": "the read-back did not confirm the action"})
+                    row.update(status="failed", result=res, error=(res.get("error") if isinstance(res, dict) else None)
+                               or {"code": "not-verified", "detail": "the read-back did not confirm the action"})
             except FmError as e:
                 row.update(status="failed", error={"code": e.code, "detail": e.detail})
             except FmUnavailable as e:
