@@ -54,6 +54,25 @@ Back up your save folder before trying anything new; this release only reads, bu
 
 Add `--json` before the command for machine output. `scripts/smoke.sh` runs all of them against the live game.
 
+## MCP server (read-only)
+
+`fm-mcp` exposes the read commands as MCP tools over stdio (each tool runs `fm --json ...`; errors come back as
+`{"ok": false, "error": {...}}`). It has no tools that launch, restart, load or call anything in the game.
+
+```bash
+cd fm && uv sync --extra mcp
+claude mcp add fm-assistant -- uv run --directory /path/to/fm-cli/fm --extra mcp fm-mcp
+```
+
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{"mcpServers": {"fm-assistant": {"command": "uv",
+  "args": ["run", "--directory", "/path/to/fm-cli/fm", "--extra", "mcp", "fm-mcp"]}}}
+```
+
+New CLI commands become tools by adding one `Tool(...)` line to `TOOLS` in `fm/src/fm_assistant/mcp_server.py`.
+
 ## Unsupported game builds
 
 The plugin is tested against specific game builds (`fm doctor` lists them). On another build every command

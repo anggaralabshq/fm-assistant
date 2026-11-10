@@ -6,11 +6,15 @@ requires-python = ">=3.10"
 license = "MIT"
 dependencies = ["websockets>=12", "click>=8"]
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.2"]
+
 [project.scripts]
 fm = "fm_assistant.cli:main"
+fm-mcp = "fm_assistant.mcp_server:main"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "mcp>=1.2"]
 
 [build-system]
 requires = ["hatchling"]
