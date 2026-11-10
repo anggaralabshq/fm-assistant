@@ -1,0 +1,12 @@
+FM Assistant
+Copyright (c) 2026 wisnuanggara. Licensed under the MIT License (see LICENSE).
+
+This project ports patterns from, or builds on, the following works:
+
+- fm-dof-mcp (MIT License): binding-framework read patterns (fabricate -> bind -> poll -> collect),
+  native Bindings.Create resolution, and the position bit table used in fm/src/fm_assistant/positions.py.
+- cli-anything-fm27 (Apache License 2.0): FM27 save-file parsing, used only by development checks.
+- sptndc FM27 BepInEx macOS arm64 loader: required at runtime, not redistributed here.
+
+Football Manager is a trademark of its owners. This project is not affiliated with or endorsed by them,
+and contains no game files or game-database content.
