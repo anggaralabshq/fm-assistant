@@ -369,6 +369,15 @@ Never by visible text (the owner's UI is Indonesian):
 - Tick sources: `UIElementsRuntimeUtility.RepaintPanels`, `PanelManager.Tick`, `Bindings.Update` prefixes, main
   thread only (one launch got no RepaintPanels prefix calls at all).
 
+## Discovery notes (phase 2)
+
+Details: `docs/discovery/2026-11-10-phase2.md`.
+- Person actions (approach, offer contract, shortlist, scout) are `ActionEntry` rows in the profile's secondary tabs;
+  perform with `FM.Game.PluginContextActionsModule.HandleActionEvent(id, Event, ActionReference, ActionData, true, null)`.
+  Allow-list action ids: own-player profiles also carry release / termination.
+- Negotiations: `Person.ContractEditSession` (contexts `human`, `BuyingClub`) reads headless; the prefilled terms are
+  the demand. `Estimated*` have no handler anywhere. Popups/dropdowns live under the UI root's `FloatingElement`.
+
 ## Discovery notes (phase 1d)
 
 - Never run il2cpp reflection `FieldInfo.GetValue` over a UI element's fields (tried on an `FMStarRatingTemp`
