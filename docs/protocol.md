@@ -174,3 +174,23 @@ Never by visible text (the owner's UI is Indonesian):
   frames crashes in libunwind (Phase 0 "startup crash" signature).
 - Tick sources: `UIElementsRuntimeUtility.RepaintPanels`, `PanelManager.Tick`, `Bindings.Update` prefixes, main
   thread only (one launch got no RepaintPanels prefix calls at all).
+
+## Discovery notes (phase 1c)
+
+Details: `docs/discovery/2026-11-10-phase1c.md`.
+- Property names can be harvested from `il2cpp_data/Metadata/global-metadata.dat` (concatenated, sorted
+  literals) and validated in bulk with `prop_check`.
+- Two classes of props: headless (land on `read`'s planted root) and context-bound (exist in `prop_check`,
+  never land headless: `Team.Tactic`, `Human*` inbox lists, `NumberUnreadMessages`, per-player `Morale` /
+  `Happiness*`, star ratings, `Estimated*Demands`, `IsWillingToEnterNegotiations`, `HasTeamReport`).
+  Context-bound values can be read via `read {ref: "path"}` on a panel's own node while that panel is open.
+- Panel nodes at the tree root are `<PanelId or PanelID GUID><hex counter>`; the counter changes each time
+  the panel opens, so find nodes by walking, never by fixed path.
+- Headless finds: news item fields on `NewsItemReference`; `SeasonStatsList`, `LastFiveClubMatchesForm`;
+  `FullContract.AgreedPlayingTime` (squad status), `FullContract.MinimumFeeReleaseClauseValue`,
+  `FullContract.ContractClauses`; `Club.WagesData.PlayerTypeWageData`; `Club.PlayersOutOnLoan`,
+  `Club.IntakeDate`; person `LoanClub`, `OnLoanFrom`, `LoanContract`, `Loan*` stats; team `NextFixture`
+  (`FixtureDate`, `HomeTeam`, `AwayTeam`, `Competition`), `Next5FixturesData`, `RemainingLeagueFixtures`,
+  `Team.HappinessIssuesPlayers`, `Team.ClubAtmosphereFeedback`.
+- Primary tab `ClubTacticsButton` opens `TacticalPlannerTool`; its `Tactic` node holds
+  `TacticalPositionsCombined` (11 slots: player, IP/OOP position and role bitmasks).
