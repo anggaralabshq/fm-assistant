@@ -1,7 +1,7 @@
 [project]
 name = "fm-assistant"
 version = "0.1.0"
-description = "Read-only assistant manager for Football Manager 27 on macOS"
+description = "Assistant manager for Football Manager 27 on macOS: reads your career, acts only after approval"
 requires-python = ">=3.10"
 license = "MIT"
 dependencies = ["websockets>=12", "click>=8"]
