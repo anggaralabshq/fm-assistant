@@ -1,0 +1,64 @@
+{
+ "staff_slots": {
+  "coaching": {
+   "used": 7,
+   "max": 9,
+   "summary": "Cukup",
+   "board_feedback": "Sesuai target",
+   "jobs": [
+    {
+     "job": "Pelatih",
+     "job_type": 104,
+     "used": 7,
+     "max": 3
+    }
+   ]
+  },
+  "recruitment": {
+   "used": 1,
+   "max": 4,
+   "summary": "3 lowongan",
+   "board_feedback": "Butuh pemandu bakat",
+   "jobs": [
+    {
+     "job": "Pemandu Bakat",
+     "job_type": 14,
+     "used": 0,
+     "max": 2
+    },
+    {
+     "job": "Kepala Pemandu",
+     "job_type": 44,
+     "used": 0,
+     "max": 1
+    },
+    {
+     "job": "Direktur Sepakbola",
+     "job_type": 10,
+     "used": 1,
+     "max": 1
+    }
+   ]
+  },
+  "medical": {
+   "used": 1,
+   "max": 3,
+   "summary": "2 lowongan",
+   "board_feedback": "",
+   "jobs": [
+    {
+     "job": "Fisioterapis",
+     "job_type": 12,
+     "used": 0,
+     "max": 1
+    },
+    {
+     "job": "Dokter",
+     "job_type": 46,
+     "used": 0,
+     "max": 1
+    }
+   ]
+  }
+ }
+}

@@ -8,6 +8,7 @@ from datetime import date, timedelta
 
 from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
 from . import depth as depth_mod
+from . import vacancies as vacancies_mod
 from . import doctor as doctor_mod
 from . import game as game_mod
 from .client import FmClient, FmError, FmUnavailable
@@ -279,6 +280,33 @@ def staff_slots(st):
     need_hello(st)
     slots = FmClient().call("club")["staff_slots"]
     emit(st, slots, slots_text(slots))
+
+
+@staff.command("vacancies")
+@click.option("--top", type=click.IntRange(1), default=3, show_default=True, help="Candidates per role.")
+@click.pass_obj
+def staff_vacancies(st, top):
+    """Open staff jobs (below the board's target) with ranked candidates."""
+    roles, job_roles = staff_mod.load_roles(), vacancies_mod.load_job_roles()
+    need_hello(st)
+    c = FmClient()
+    club_ = c.call("club")
+    res = c.call("staff_search", max=1000)
+    jobs = vacancies_mod.fill(vacancies_mod.open_jobs(club_), res, roles, job_roles, top)
+    blocks = []
+    for j in jobs:
+        head = f"{j['job']}: {j['open']} open" + (f" — {j['summary']}" if j.get("summary") else "")
+        if not j["roles"]:
+            blocks.append(head + "\n  no role mapping, no candidates")
+            continue
+        t = table([[s["score"], s["role"], s["name"], s.get("age"), s.get("preferred_job"),
+                    budget.fmt(s.get("wage_demand")), budget.fmt(s.get("current_wage"))] for s in j["candidates"]],
+                  ["score", "role", "name", "age", "job", "wage demand", "current wage"])
+        blocks.append(head + "\n" + "\n".join("  " + ln for ln in t.splitlines()))
+    text = "\n\n".join(blocks) or "No open staff jobs."
+    if res["truncated"]:
+        text += f"\nranked among {res['returned']} of {res['count']}"
+    emit(st, {"jobs": jobs, "count": res["count"], "returned": res["returned"], "truncated": res["truncated"]}, text)
 
 
 @main.group()
