@@ -20,8 +20,7 @@ def check(tactic: dict, squad: dict) -> list[dict]:
         rows.append({"index": s["index"], "position_label": s.get("position_label"), "role": s.get("role"),
                      "player": who, "natural": natural,
                      "injured": None if p is None else p.get("injured"),
-                     "condition": None if p is None else p.get("condition"),
-                     "best_oop_role": None if p is None else p.get("best_oop_role")})
+                     "condition": None if p is None else p.get("condition")})
     return rows
 
 

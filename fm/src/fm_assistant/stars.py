@@ -2,11 +2,8 @@
 
 
 def to_stars(v) -> float | None:
-    """Game value (0-20 scale) to stars, as the first-team star widget shows it: (v - 10) / 2.
-
-    ponytail: TODO(controller) below 10 returns None until the youth mapping (FMStarRatingSettings.YouthConfig) is
-    verified live against the youth SquadScreen; then replace this single function and record it in docs/protocol.md.
-    """
+    """Game value (0-20 scale) to stars, as the star widget shows it: (v - 10) / 2. Verified live for first team
+    and youth (ages 17-21); no value below 10 was seen, so those stay None (unknown) rather than a guessed star."""
     if isinstance(v, bool) or not isinstance(v, int) or not 10 <= v <= 20:
         return None
     return (v - 10) / 2

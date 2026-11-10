@@ -32,7 +32,7 @@ for r in rows:
         v = r[key]
         if v is not None and not (1 <= v <= 10):
             errors.append(f"{r['name']}: {key} {v!r} outside 1-10")
-# ponytail: TODO(controller) set to the range recorded live in docs/protocol.md (discovery saw about 10-13 for own players).
+# sanity bound only: live 2026-11-10 saw 9-14 for own players
 MORALE_RANGE = (0, 20)
 for p in f["players"]:
     m, h = p.get("morale"), p.get("happiness")
@@ -43,7 +43,7 @@ for p in f["players"]:
     if (m is None) != (h is None):
         errors.append(f"{p['name']}: morale and happiness should be both set or both null (CanViewHappinessInfo)")
 severities = sorted({a["severity"] for p in f["players"] for a in (p.get("happiness") or {}).values()})
-print("happiness severities seen (record in docs/protocol.md, set form.UNHAPPY_SEVERITY):", severities)
+print("happiness severities seen (scales per area: see docs/protocol.md):", severities)
 stray = set(f["concerns"]) - squad_uids
 if stray:
     errors.append(f"concerns not in squad: {sorted(stray)}")

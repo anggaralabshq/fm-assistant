@@ -106,13 +106,17 @@ def test_morale_missing_is_null():
     assert [(x["morale"], x["morale_text"]) for x in rows] == [(None, None)] * 3
 
 
-def test_unhappy_areas_over_threshold():
-    t = form.UNHAPPY_SEVERITY
-    p = {**F(1), "morale": M(5, "Buruk"), "happiness": H(pt=t + 1, club=t, tr=t + 3)}
-    rows = form.summary(doc(p, {**F(2), "morale": M(), "happiness": H(pt=t)}))
-    assert rows[0]["unhappy"] == ["playing_time", "training"]   # strictly above; a value at the threshold is not listed
+def test_unhappy_rule_per_area():
+    # live (2026-11-10): playing_time/club/management lower = happier, unhappy above 0;
+    # training higher = happier, "worried" at -26/-32, content down to -20; -111 = no data
+    p = {**F(1), "morale": M(5, "Buruk"), "happiness": H(pt=1, club=0, mgmt=-5, tr=-26)}
+    q = {**F(2), "morale": M(), "happiness": H(pt=-3, tr=52)}
+    r = {**F(3), "morale": M(), "happiness": H(tr=-111)}
+    s = {**F(4), "morale": M(), "happiness": H(tr=-20)}
+    rows = form.summary(doc(p, q, r, s))
+    assert rows[0]["unhappy"] == ["playing_time", "training"]
     assert rows[0]["morale"] == 5 and rows[0]["morale_text"] == "Buruk"
-    assert rows[1]["unhappy"] == []
+    assert [x["unhappy"] for x in rows[1:]] == [[], [], []]
     assert [x["uid"] for x in form.flags(rows)["unhappy"]] == [1]
 
 

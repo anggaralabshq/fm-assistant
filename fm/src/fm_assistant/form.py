@@ -1,11 +1,16 @@
 """Season and recent form (F2). A player with no matches has rating None, never 0.0."""
 
 LOW_FORM = 6.5
-# ponytail: TODO(controller) set from live values. `severity` is the game's int per happiness area; an area is
-# unhappy when severity is strictly above this. Pick the value where the game's own text turns negative and record
-# the severities seen in docs/protocol.md. 2 is a placeholder guess.
-UNHAPPY_SEVERITY = 2
 AREAS = ("playing_time", "club", "management", "training")
+NO_DATA = -111
+TRAINING_WORRIED = -20  # live: training text turns "worried" below -20 (seen -26, -32); content from -20 up
+
+
+def _unhappy(area: str, sev) -> bool:
+    """Scales differ per area (live 2026-11-10): training higher = happier, the rest lower = happier."""
+    if not isinstance(sev, int) or sev == NO_DATA:
+        return False
+    return sev < TRAINING_WORRIED if area == "training" else sev > 0
 
 
 def summary(form: dict) -> list[dict]:
@@ -22,8 +27,7 @@ def summary(form: dict) -> list[dict]:
         known = [m for m in (l5.get("minutes") or []) if isinstance(m, int)]
         morale = p.get("morale") or {}  # null = cannot view, or visible but unread: never 0
         happy = p.get("happiness") or {}
-        unhappy = [a for a in AREAS if isinstance((happy.get(a) or {}).get("severity"), int)
-                   and happy[a]["severity"] > UNHAPPY_SEVERITY]
+        unhappy = [a for a in AREAS if _unhappy(a, (happy.get(a) or {}).get("severity"))]
         rows.append({"uid": p["uid"], "name": p["name"], "apps": apps, "rating": rating,
                      "morale": morale.get("value"), "morale_text": morale.get("text") if morale.get("value") is not None else None,
                      "unhappy": unhappy,

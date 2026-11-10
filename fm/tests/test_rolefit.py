@@ -12,7 +12,7 @@ def sq(uid, mask, condition=95, injured=False, **extra):
 
 # squad matching tests/fixtures/tactic.json (slot 9 AM (L) is empty); 104 plays out of position, 105 is injured,
 # 106 is tired, 107 has left the club (not in the squad list)
-SQUAD = {"players": [sq(101, 1), sq(102, 4), sq(103, 16), sq(104, 128, best_oop_role="Libero"), sq(105, 8, -1, True),
+SQUAD = {"players": [sq(101, 1), sq(102, 4), sq(103, 16), sq(104, 128), sq(105, 8, -1, True),
                      sq(106, 128, 70), sq(108, 1024), sq(109, 2048), sq(111, 16384), sq(120, 4096)]}
 
 
@@ -35,8 +35,6 @@ def test_natural_uses_covers():
     rows = by_index(rolefit.check(fixture("tactic.json"), SQUAD))
     assert rows[0]["natural"] is True                      # GK
     assert rows[3]["natural"] is False                     # DM-only player in D (C)
-    assert rows[3]["best_oop_role"] == "Libero"
-    assert rows[2]["best_oop_role"] is None
     assert rows[5]["natural"] is True and rows[5]["condition"] == 70
 
 
@@ -62,5 +60,4 @@ def test_tactic_json_shape(monkeypatch):
     res = json.loads(run("--json", "tactic").stdout)["result"]
     assert ("squad", {"team": "first"}) in calls
     assert set(res) == {"name", "mentality", "slots", "fit"} and len(res["fit"]) == 11
-    assert set(res["fit"][0]) == {"index", "position_label", "role", "player", "natural", "injured", "condition",
-                                  "best_oop_role"}
+    assert set(res["fit"][0]) == {"index", "position_label", "role", "player", "natural", "injured", "condition"}

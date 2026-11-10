@@ -11,7 +11,7 @@ import sys
 from fm_assistant import rolefit
 from fm_assistant.client import FmClient
 
-# ponytail: TODO(controller) fill from the tactics screen, e.g. ["GK", "D (R)", ...]; None skips the comparison.
+# ponytail: screen labels need a dev-only ui read; ops agent compared all 11 live on 2026-11-10. None = print only.
 TACTICS_SCREEN_LABELS = None
 
 c = FmClient(timeout=95)

@@ -277,7 +277,7 @@ morale: {value, text}|null, happiness: {playing_time, club, management, training
     is a short label (no name). The text turns negative between −20 and −26. −111 with text `"-"` = no training
     data (two reserve players).
   - So no single "severity above X" threshold works for all four areas: per area, unhappy = `severity > 0` for
-    playing_time/club/management, `severity <= -26` (seen; the boundary lies in −25…−21) for training, and −111 =
+    playing_time/club/management, `severity < -20` for training (worried seen at −26 and −32, content at −20; fm uses −20 so the unknown −25…−21 band errs toward flagging), and −111 =
     unknown.
   - `change` (`HappinessRecentChange`): −1, 0, 1 seen.
 
