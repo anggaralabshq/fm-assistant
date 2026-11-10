@@ -7,6 +7,7 @@ import click
 from datetime import date, timedelta
 
 from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
+from . import depth as depth_mod
 from . import doctor as doctor_mod
 from . import game as game_mod
 from .client import FmClient, FmError, FmUnavailable
@@ -224,6 +225,29 @@ def squad_watch(st, within, team):
     emit(st, {"today": today.isoformat(), "expiring": exp, "injured": inj}, text)
 
 
+def _depth_for(team: str = "first") -> dict:
+    s = squad_mod.normalize(FmClient().call("squad", team=team))
+    return depth_mod.depth(s["players"], depth_mod.load_minimums(depth_mod.USER_DEPTH))
+
+
+def depth_text(res: dict) -> str:
+    text = table([[s["slot"], f"{s['fit']}/{s['min']}" + (" thin" if s["thin"] else ""), ", ".join(s["names"])]
+                  for s in res["slots"]], ["slot", "fit/min", "names"])
+    if res["unknown_position"]:
+        text += "\nunknown position: " + ", ".join(res["unknown_position"])
+    return text
+
+
+@squad.command("depth")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_depth(st, team):
+    """Players per position slot (positions only, no formation); thin = fit players below the minimum."""
+    need_hello(st)
+    res = _depth_for(team)
+    emit(st, res, depth_text(res))
+
+
 @main.group()
 def staff():
     """Staff search and slots (F11)."""
@@ -277,6 +301,32 @@ def players_search(st, max_, affordable):
                           budget.fmt(p.get("wage")), p.get("scout_rating")] for p in res["rows"]],
                         ["name", "age", "position", "price", "wage", "scout"])
          + f"\n{shown(res)}" + (f", {len(res['rows'])} affordable" if affordable else ""))
+
+
+@players.command("targets")
+@click.option("--top", type=click.IntRange(1), default=5, show_default=True, help="Candidates per thin slot.")
+@click.option("--max", "max_", type=click.IntRange(1, 1000), default=1000, show_default=True, help="Rows to read.")
+@click.pass_obj
+def players_targets(st, top, max_):
+    """Affordable scouting targets for each thin position slot of the first team."""
+    need_hello(st)
+    c = FmClient()
+    res = _depth_for("first")
+    thin = [s for s in res["slots"] if s["thin"]]
+    found = players_mod.normalize(c.call("player_search", max=max_))
+    club_ = c.call("club")
+    rows = players_mod.affordable(found["rows"], club_["transfer_budget"]["value"], budget.wage_headroom(club_))
+    picked = depth_mod.targets(thin, rows, top)
+    out = {**res, "targets": picked, "searched": {k: found.get(k) for k in ("count", "returned", "truncated")}}
+    parts = [depth_text(res)]
+    for s in thin:
+        parts.append(f"\n{s['slot']} (fit {s['fit']}/{s['min']})")
+        parts.append(table([[p["name"], p.get("age"), p["position"], budget.fmt(p.get("asking_price") or p.get("value")),
+                             budget.fmt(p.get("wage")), "budget?" if p["budget_unknown"] else ""]
+                            for p in picked[s["slot"]]], ["name", "age", "position", "price", "wage", ""])
+                     if picked[s["slot"]] else "no affordable candidates")
+    parts.append(f"\n{shown(found)}, {len(rows)} affordable")
+    emit(st, out, "\n".join(parts))
 
 
 @main.group()

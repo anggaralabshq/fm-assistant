@@ -16,6 +16,30 @@ GROUPS = [
 ]
 
 
+SLOTS = ["GK", "D (R)", "D (L)", "D (C)", "WB (R)", "WB (L)", "DM", "M (R)", "M (L)", "M (C)",
+         "AM (R)", "AM (L)", "AM (C)", "ST (C)"]
+
+
+def covers(mask: int, slot: str) -> bool:
+    """Can a player with this mask play the slot? Own bit; side slots also centre bit + matching side modifier."""
+    if slot not in SLOTS:
+        raise ValueError(f"unknown slot {slot!r}")
+    if slot == "GK":
+        return bool(mask & GK)
+    label, _, side = slot.partition(" ")
+    side = side.strip("()")
+    for lab, right, left, centre, _native in GROUPS:
+        if lab != label:
+            continue
+        if side == "":
+            return bool(mask & centre)
+        if side == "C":
+            return bool(mask & (centre | (32768 | 65536 if lab == "ST" else 0)))
+        own, modifier = (right, RIGHT_SIDED) if side == "R" else (left, LEFT_SIDED)
+        return bool(mask & own) or bool(centre and mask & centre and mask & modifier)
+    raise ValueError(f"unknown slot {slot!r}")
+
+
 def decode(mask: int) -> str:
     """e.g. 16|8|4 -> "D (RLC)"; unknown or empty -> ""."""
     parts = ["GK"] if mask & GK else []
