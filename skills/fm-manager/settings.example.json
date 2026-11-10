@@ -7,6 +7,10 @@
       "Bash(fm --json squad list*)",
       "Bash(fm --json staff search*)",
       "Bash(fm --json staff slots)",
+      "Bash(fm --json staff vacancies*)",
+      "Bash(fm --json squad watch*)",
+      "Bash(fm --json squad depth*)",
+      "Bash(fm --json players targets*)",
       "Bash(fm --json players search*)",
       "Bash(fm --json training show*)",
       "Bash(fm --json training load)"
