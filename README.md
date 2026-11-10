@@ -1,33 +1,80 @@
-# FM Assistant
+<div align="center">
 
-An assistant manager for Football Manager 27 on macOS (Apple Silicon, Steam). It reads your career from the
-running game and recommends staff to hire, players to scout, how your budget stands and how heavy your
-training load is. You decide.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
+  <img src="docs/assets/banner-light.png" width="100%" alt="fm-assistant: an assistant manager for your FM27 career, as a Claude Code skill, MCP server and fm CLI on Apple Silicon Macs">
+</picture>
 
-**Status:** reads everything below; a few actions (staff offers, shortlist, training sessions, contract renewals)
-run only after you approve a plan, with a save backup first. It never saves, bids, sells or changes tactics.
+### An assistant manager for your Football Manager 27 career, inside Claude Code
 
-## How it works
+**[Quick start ↓](#quick-start)** &nbsp;·&nbsp; **[Install ↓](#install)** &nbsp;·&nbsp; **[Commands ↓](#commands)** &nbsp;·&nbsp; **[Protocol →](docs/protocol.md)**
+
+![macOS Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-black?logo=apple)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+</div>
+
+A Football Manager career runs on dozens of screens. Contracts ending, injured players' return dates, open staff
+jobs, who is tired before a busy week, which Player Database rows fit the wage room: each lives on its own screen,
+and the game never puts them side by side. You click through Staff Search, Squad, Training and the inbox before
+every session, and still miss the contract that ran out or the scout job that stayed open.
+
+fm-assistant reads those screens for you from the running game and answers in plain language:
+
+- **Reads what your staff can see.** A plugin inside the game reads the same data the screens bind to. Unscouted
+  players stay `-` or `6-10`, never their hidden values.
+- **Recommends, with the numbers.** Staff for each open job, targets for thin positions within budget, contract and
+  injury watch, form, fixtures, loans, rotation options, and what changed since last time.
+- **Acts only after you say yes.** Staff offers, shortlist, training sessions and contract renewals go through a plan
+  you approve. Every apply backs up the save (SHA-256) first and logs the verified result.
+- **Leaves the game alone.** It never saves, bids, sells or changes tactics. The original game app is untouched, and
+  an untested game build is read only.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/diagram-dark.png">
+  <img src="docs/assets/diagram-light.png" width="100%" alt="You ask in Claude Code or an MCP client; the fm-manager skill reads facts and recommends, and shows an approval box; the fm CLI writes plans, backs up the save and keeps an audit log; it talks over WebSocket on 127.0.0.1 with a session token to the plugin inside FM27, which reads the game's screen data and runs allow-listed actions with a one-use token; the verified result goes back to you">
+</picture>
+
+## Quick start
+
+**1. Install** (after the BepInEx loader, see [Install](#install))
+
+```bash
+git clone <this repo> fm-assistant && cd fm-assistant && bash scripts/install.sh
+```
+
+**2. Check**: start FM27 from Steam, load your career, then
+
+```bash
+fm doctor
+```
+
+**3. Ask** in Claude Code
 
 ```
-Claude Code skill (fm-manager)  ->  fm CLI (Python)  ->  WebSocket 127.0.0.1 + session token  ->  plugin inside FM27
+/fm-briefing
+ada scout bagus yang muat di budget?
 ```
 
-The plugin runs inside the game through a BepInEx loader and reads the same data the game's own screens
-bind to, so what you get is what your manager could see: unscouted players show `-` or ranges like `6-10`,
-not their true values. Screens are opened by internal panel id, never by on-screen text, so any game
-language works.
+The skill answers in Indonesian.
 
 ## Install
 
-1. Install the sptndc FM27 BepInEx loader (macOS arm64) and set the Steam launch options it documents.
-   The original game app is not modified.
-2. Build and install the plugin: `bash plugin/build.sh` (needs the .NET 6 SDK; the loader's generated
-   interop assemblies must exist, i.e. start the game once through the loader).
-3. Install the CLI: `uv tool install ./fm`.
-4. Start FM27 from Steam, load your career, then run `fm doctor`.
-5. Optional, for Claude Code: copy `skills/fm-manager` into `~/.claude/skills/`, the files in its `commands/`
-   into `~/.claude/commands/`, and merge `settings.example.json` into your settings.
+Needs an Apple Silicon Mac, FM27 on Steam, [uv](https://docs.astral.sh/uv/) and the
+[.NET 6 SDK](https://dotnet.microsoft.com/download) (to build the plugin).
+
+1. Install the sptndc FM27 BepInEx loader (macOS arm64): put its `FM27-BepInEx` folder next to `fm.app`, set the
+   Steam launch option its README gives, start the game once and quit. The loader makes its own copy of the game
+   and rebuilds it after Steam updates; the original `fm.app` is not modified.
+2. `bash scripts/install.sh` builds and installs the plugin, installs the `fm` CLI (`uv tool`), and copies the
+   `fm-manager` skill and its slash commands into `~/.claude`. Options: `--mcp` (also `fm-mcp`), `--no-skill`.
+   It checks the Steam launch option but never edits Steam's settings. Re-run it after `git pull` to update.
+3. Merge `~/.claude/skills/fm-manager/settings.example.json` into your Claude Code settings: read commands run
+   without prompts, every `fm apply` asks you first.
+
+Uninstall: `bash scripts/uninstall.sh` (quit the game first). It removes the plugin, CLI and skill and keeps your
+save backups in `~/.fm-assistant/backups`; `--purge` also removes plans, the audit log and snapshots.
 
 Back up your save folder before trying anything new; the loader is third-party.
 
@@ -95,15 +142,15 @@ must ask you before each call. There are no tools that launch, restart, load or 
 `fm-mcp` runs over stdio; each tool runs `fm --json ...`, and errors come back as `{"ok": false, "error": {...}}`.
 
 ```bash
-cd fm && uv sync --extra mcp
-claude mcp add fm-assistant -- uv run --directory /path/to/fm-cli/fm --extra mcp fm-mcp
+bash scripts/install.sh --mcp
+claude mcp add fm-assistant -- fm-mcp
 ```
 
-Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`; use the full path from
+`which fm-mcp`):
 
 ```json
-{"mcpServers": {"fm-assistant": {"command": "uv",
-  "args": ["run", "--directory", "/path/to/fm-cli/fm", "--extra", "mcp", "fm-mcp"]}}}
+{"mcpServers": {"fm-assistant": {"command": "/Users/you/.local/bin/fm-mcp"}}}
 ```
 
 New CLI commands become tools by adding one `Tool(...)` line to `TOOLS` in `fm/src/fm_assistant/mcp_server.py`.
@@ -116,16 +163,38 @@ properties the plugin reads; reads then fail with a clear error instead of guess
 
 ## Known gaps
 
-- Staff wage demands are not readable outside the contract-offer screen; only current wages are shown.
+- Staff wage demands appear only once talks are open (`staff.approach`); searches show current wages.
 - Player search returns the Player Database's current filter.
 - The training view covers the month the Training screen shows.
 - Scout report requests and individual training focus exist in the plugin but the skill leaves them manual: no read
   shows your scouts' ids or the focus option names yet.
 
-See `docs/protocol.md` for the plugin protocol and everything discovered about the game's data.
+
+## Why fm-assistant
+
+- **Live data, not a save-file dump.** Save parsers show a frozen copy and the true hidden values; this reads the
+  running game, as your staff know it, and is current after every Continue.
+- **Any game language.** Screens are opened by internal panel id and data is read by property name, never by
+  on-screen text.
+- **Human in the loop by construction.** A closed list of action kinds in the CLI, allow-listed game actions in the
+  plugin, a one-use token per action, a save backup before each apply, and an audit log. A chat window that clicks
+  for you has none of these.
+- **Survives game updates honestly.** Bindings are looked up by name; an untested build warns, turns actions off,
+  and fails with a clear error instead of guessing.
+
+## Development
+
+- `cd fm && uv run pytest` (unit tests, no game needed); `bash scripts/smoke.sh` runs every read command against the
+  live game (never applies anything).
+- `bash plugin/build.sh` builds the plugin; ops reload into the running game without a restart.
+- `docs/protocol.md` documents the plugin protocol and what was discovered about the game's data.
 
 ## Credits
 
 fm-dof-mcp (MIT): binding read patterns and the position bit table. cli-anything-fm27 (Apache-2.0): save
 parsing used in development checks. sptndc's FM27 BepInEx loader. See `NOTICE`. Not affiliated with the
 makers of Football Manager.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
