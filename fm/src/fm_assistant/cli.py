@@ -13,6 +13,7 @@ from . import briefing as briefing_mod
 from . import fixtures as fixtures_mod
 from . import stars as stars_mod
 from . import rolefit as rolefit_mod
+from . import trends as trends_mod
 from . import rotation as rotation_mod
 from . import inbox as inbox_mod
 from . import form as form_mod
@@ -190,8 +191,9 @@ def slots_text(slots: dict) -> str:
 
 
 @main.command("briefing")
+@click.option("--no-snapshot", is_flag=True, help="Do not save today's trend snapshot.")
 @click.pass_obj
-def briefing_cmd(st):
+def briefing_cmd(st, no_snapshot):
     """Session briefing: next match, injuries, tired, contracts, concerns, form, vacancies, loans (no slow searches)."""
     need_hello(st)
     c = FmClient()
@@ -209,6 +211,11 @@ def briefing_cmd(st):
     except FmError as e:
         parts["inbox"] = {"error": e.code}
     b = briefing_mod.build(parts)
+    if not no_snapshot and all(isinstance(parts.get(k), dict) and "error" not in parts[k] for k in ("club", "squad", "form")):
+        try:
+            trends_mod.save(trends_mod.snapshot(parts["club"], parts["squad"], parts["form"]))
+        except (OSError, KeyError, TypeError, ValueError):  # a snapshot problem never hides the briefing
+            click.echo("warning: could not save the trend snapshot", err=True)
     emit(st, b, briefing_mod.text(b))
 
 
@@ -222,6 +229,34 @@ def inbox_cmd(st, since, unread, max_):
     need_hello(st)
     res = FmClient().call("inbox", since=since, tab="unread" if unread else "all", max=max_)
     emit(st, res, inbox_mod.text(res, since))
+
+
+def _snapshot() -> dict:
+    c = FmClient()
+    return trends_mod.snapshot(c.call("club"), c.call("squad", team="first"), c.call("form", team="first"))
+
+
+@main.command("snapshot")
+@click.pass_obj
+def snapshot_cmd(st):
+    """Save today's club and squad state for trends (kept in ~/.fm-assistant/snapshots, not in the repo)."""
+    need_hello(st)
+    snap = _snapshot()
+    path = trends_mod.save(snap)
+    emit(st, {"path": str(path), "date": snap["date"], "players": len(snap["players"])}, f"saved {path}")
+
+
+@main.command("trends")
+@click.pass_obj
+def trends_cmd(st):
+    """Save today's snapshot, then compare with the latest earlier one of this club."""
+    need_hello(st)
+    snap = _snapshot()
+    prev = trends_mod.load_previous(snap["club_uid"], snap["date"])   # before saving: a same-day re-run compares days 0
+    path = trends_mod.save(snap)
+    d = trends_mod.diff(prev, snap) if prev else None
+    emit(st, {"saved": str(path), "date": snap["date"], "previous": prev and prev["date"], "diff": d},
+         trends_mod.text(snap, prev, d))
 
 
 @main.group()

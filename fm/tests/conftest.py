@@ -28,6 +28,15 @@ class FakePlugin:
                 ws.send(json.dumps({"v": 1, "id": req["id"], **resp}, ensure_ascii=False))
 
 
+@pytest.fixture(autouse=True)
+def snapshots_in_tmp(tmp_path_factory, monkeypatch):
+    """No test may write snapshots to the real home."""
+    from fm_assistant import trends
+    d = tmp_path_factory.mktemp("snapshots")
+    monkeypatch.setattr(trends, "SNAP_DIR", d)
+    monkeypatch.setenv("FM_ASSISTANT_SNAP_DIR", str(d))
+
+
 @pytest.fixture
 def fake(tmp_path):
     made = []
