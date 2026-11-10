@@ -591,4 +591,191 @@ internal static class Act
             ["before"] = new JsonObject { ["being_scouted"] = before }, ["after"] = new JsonObject { ["being_scouted"] = after }, ["performed"] = perf,
         };
     }
+
+    // ------------------------------------------------------------------ F11: staff approach and offer
+
+    private static async Task<bool> WaitPanel(string panel, int ms, CancellationToken ct)
+    {
+        var end = Environment.TickCount64 + ms;
+        while (Environment.TickCount64 < end)
+        {
+            if (await Reader.Main(() => Ui.IsOpen(panel), ct)) return true;
+            await Task.Delay(250, ct);
+        }
+        return false;
+    }
+
+    /// {uid, apply_token} -> {verified, negotiation, demand: {job, wage, end_date}}: approaches a staff member
+    /// (PersonApproachToSign). The prefilled offer the game shows is the staff member's demand.
+    public static async Task<JsonNode> StaffApproachOp(JsonObject a, CancellationToken ct)
+    {
+        var uid = Uid(a);
+        await Career(ct);
+        await OpenProfile(uid, false, ct);
+        await Perform(ApproachToSign, uid, n => true, ct);
+        var opened = await Until(() => Reader.Main(NegotiationScreen, ct), x => x, 8000, ct);
+        await Task.Delay(500, ct);
+        var neg = await ReadNegotiation(uid, ct);
+        return new JsonObject
+        {
+            ["verified"] = opened && (bool)neg["open"],
+            ["negotiation"] = neg,
+            ["demand"] = new JsonObject { ["job"] = neg["job"].Copy(), ["wage"] = neg["wage"].Copy(), ["end_date"] = neg["end_date"].Copy() },
+        };
+    }
+
+    private const int ProposeEvent = 20, FinalizeEvent = 41;   // speak-to actions: propose terms / finalize deal (terms = demand)
+
+    /// Main thread. The negotiation's speak-to actions in screen order: [{event, title, disabled, exit, confirm}].
+    private static List<(int Event, string Title, bool Disabled, bool Exit, bool Confirm)> SpeakActions(TypedValue actions, out int buttonsCount)
+    {
+        var res = new List<(int, string, bool, bool, bool)>();
+        buttonsCount = Reader.ListElems(Field(actions, "ActionsForButtonsList"), 20).Count;
+        foreach (var r in Reader.ListElems(Field(actions, "ActionsForDropdown"), 20))
+        {
+            var row = Field(r, "RowData") ?? r;
+            res.Add((IntOf(Field(row, "Event")), Field(row, "ActionTitle")?.AsString(), BoolOf(Field(row, "IsDisabled")),
+                BoolOf(Field(row, "IsExitButton")), HasRecord(Field(row, "ConfirmationDialogData"))));
+        }
+        return res;
+    }
+
+    /// Main thread. The speak-to StandardButtons of the negotiation screen (SpeakToOptionalActionButton), in order.
+    private static List<UnityEngine.UIElements.VisualElement> SpeakButtons()
+    {
+        var res = new List<UnityEngine.UIElements.VisualElement>();
+        var p = Ui.OpenPanels().Find(x => Ui.PanelId(x) == NegotiationPanel);
+        if (p == null) return res;
+        Ui.Walk(p, 0, n =>
+        {
+            if (n.name != "SpeakToOptionalActionButton" || !Ui.Visible(n)) return;
+            Ui.Walk(n, 0, c => { if (c.name == "StandardButton" && Ui.Visible(c)) res.Add(c); });
+        });
+        return res;
+    }
+
+    private static string InnerText(UnityEngine.UIElements.VisualElement e)
+    {
+        string t = null;
+        Ui.Walk(e, 0, c => { if (t == null) t = Ui.OwnText(c); });
+        return t;
+    }
+
+    /// Main thread. Clicks the speak-to button for the action with this event: the button at the action's position,
+    /// which must show the action's own title (both game text). Returns an error when the screen does not match.
+    private static R<string> ClickSpeak(TypedValue actions, Func<int, bool> wanted)
+    {
+        var acts = SpeakActions(actions, out var buttonsCount);
+        var buttons = SpeakButtons();
+        if (acts.Count != buttonsCount || buttons.Count != acts.Count)
+            return R<string>.Err("ui-element-missing", $"{acts.Count} speak-to actions, {buttonsCount} in the button list, {buttons.Count} buttons on screen");
+        var i = acts.FindIndex(x => wanted(x.Event) && !x.Exit);
+        if (i < 0) return R<string>.Err("precondition", $"no such negotiation action (events: {string.Join(",", acts.Select(x => x.Event))})");
+        if (acts[i].Disabled) return R<string>.Err("precondition", $"negotiation action disabled: {acts[i].Title}");
+        if (acts[i].Confirm) return R<string>.Err("precondition", "negotiation action asks for confirmation (not handled)");
+        var shown = InnerText(buttons[i]);
+        if (shown != acts[i].Title) return R<string>.Err("ui-element-missing", $"button {i} shows '{shown}', action is '{acts[i].Title}'");
+        Ui.Click(buttons[i]);
+        return acts[i].Event.ToString();
+    }
+
+    /// Main thread. The wage row's step button ("-" or "+": symbols, not words).
+    private static R<bool> ClickWageStep(string sign)
+    {
+        var p = Ui.OpenPanels().Find(x => Ui.PanelId(x) == NegotiationPanel);
+        UnityEngine.UIElements.VisualElement row = null, hit = null;
+        if (p != null) Ui.Walk(p, 0, n => { if (row == null && n.name == "wage-term" && Ui.Visible(n)) row = n; });
+        if (row != null) Ui.Walk(row, 0, n => { if (hit == null && n.TryCast<SIButton>() != null && Ui.Visible(n) && InnerText(n) == sign) hit = n; });
+        if (hit == null) return R<bool>.Err("ui-element-missing", $"wage step button '{sign}' not on the negotiation screen");
+        Ui.Click(hit);
+        return true;
+    }
+
+    private static async Task<(int Wage, List<int> Steps, bool CanUp, bool CanDown)> WageState(int uid, CancellationToken ct)
+    {
+        await using var scope = new ReadScope(ct);
+        var p = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { "ContractEditSession" }, 2000, NegotiationCtx);
+        var session = p["ContractEditSession"]?.Value;
+        var sp = await scope.ReadOne(() => session, new[] { "Wage", "WeeklyWageComponentInfo" }, 3000, NegotiationCtx);
+        var s = (await scope.Collect(new List<Plant> { sp }))[0];
+        Reader.Require(s, "ContractEditSession", "Wage", "WeeklyWageComponentInfo");
+        var info = s["WeeklyWageComponentInfo"]?["CashSelectionIntervalsInfo"];
+        var steps = (info?["IntervalValues"] as JsonArray)?.Select(x => x.Int() ?? 0).ToList() ?? new List<int>();
+        return (s["Wage"].Int() ?? -1, steps, Str(info?["CanIncrementValue"]) == "True", Str(info?["CanDecrementValue"]) == "True");
+    }
+
+    /// Clicks the negotiation's speak-to button for the first non-exit action whose event `wanted` accepts. The action
+    /// list is read headless (ContractEditSession.SpeakTo.Actions) in the same scope the click uses it in.
+    private static async Task<int> Speak(int uid, Func<int, bool> wanted, CancellationToken ct, string sessionProp = "ContractEditSession")
+    {
+        await using var scope = new ReadScope(ct);
+        var p = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { sessionProp }, 2000, NegotiationCtx);
+        var session = p[sessionProp]?.Value ?? throw new OpException("binding-api-changed", $"person {sessionProp} did not resolve");
+        var sp = await scope.ReadOne(() => session, new[] { "SpeakTo" }, 3000, NegotiationCtx);
+        var speakTo = sp["SpeakTo"]?.Value ?? throw new OpException("binding-api-changed", $"{sessionProp}.SpeakTo did not resolve");
+        var ap = await scope.ReadOne(() => speakTo, new[] { "Actions" }, 3000, NegotiationCtx);
+        var actions = ap["Actions"]?.Value ?? throw new OpException("binding-api-changed", "SpeakTo.Actions did not resolve");
+        return int.Parse(await Reader.MainR(() => ClickSpeak(actions, wanted), ct));
+    }
+
+    /// {uid, wage (base currency), apply_token} -> {verified, offered: {wage, job}, answer, counter, patience, before, after}.
+    /// Needs the negotiation screen of uid (staff.approach first). One offer: the job stays as the game prefilled it,
+    /// the wage is stepped with the screen's -/+ to the largest step <= wage (or kept when it already equals wage).
+    public static async Task<JsonNode> StaffOfferOp(JsonObject a, CancellationToken ct)
+    {
+        var uid = Uid(a);
+        var target = Meta.Int(a, "wage", 0);
+        if (target <= 0) throw new OpException("bad-request", "wage (positive base-currency integer) required");
+        await Career(ct);
+        var before = await ReadNegotiation(uid, ct);
+        if (!(bool)before["on_screen"]) throw new OpException("precondition", "approach first: the negotiation screen for this person is not open (staff.approach)");
+        if ((bool)before["read_only"]) throw new OpException("precondition", "negotiation is read-only (an offer is already pending)");
+        var max = before["board_max_wage"]?["value"].Int();
+        if (max == null) throw new OpException("binding-api-changed", "board maximum (wage step list) did not resolve");
+        if (target > max) throw new OpException("precondition", $"wage {target} exceeds the board maximum {max}; nothing sent");
+        var st = await WageState(uid, ct);
+        for (var clicks = 0; clicks < 40; clicks++)
+        {
+            string sign = null;
+            if (st.Wage > target && st.CanDown) sign = "-";
+            else if (st.Wage < target && st.CanUp && st.Steps.Any(x => x > st.Wage && x <= target)) sign = "+";
+            if (sign == null) break;
+            await Reader.MainR(() => ClickWageStep(sign), ct);
+            var prev = st.Wage;
+            st = await Until(() => WageState(uid, ct), x => x.Wage != prev, 2000, ct);
+            if (st.Wage == prev) throw new OpException("ui-element-missing", $"wage did not move from {prev} after '{sign}'");
+        }
+        if (st.Wage > target) throw new OpException("precondition", $"wage could not be lowered to {target} (at {st.Wage}); nothing sent");
+        var offered = await ReadNegotiation(uid, ct);
+        if ((bool)offered["wage_over_board_max"]) throw new OpException("precondition", "the game says the wage exceeds the board maximum; nothing sent");
+        var ev = await Speak(uid, e => e == ProposeEvent || e == FinalizeEvent, ct);
+        var after = await Until(() => ReadNegotiation(uid, ct), n => (bool)n["changed_by_other_party"] || (bool)n["read_only"]
+            || (n["patience"]["status"].Int() ?? 0) != 0 || !(bool)n["on_screen"], 6000, ct);
+        await Task.Delay(1000, ct);   // the reply lands in several fields over a few frames
+        after = await ReadNegotiation(uid, ct);
+        var hired = await EmployedByHuman(uid, ct);
+        // A staff member answers at once: a counter rewrites the session terms (the wage, sometimes the job);
+        // talks ending closes the screen or empties patience; a deferred answer leaves the session read-only.
+        var rewritten = after["wage"]?["value"].Int() != offered["wage"]?["value"].Int() || (bool)after["changed_by_other_party"];
+        var ended = (after["patience"]["value"].Int() ?? 1) <= 0 || (!(bool)after["on_screen"] && !(bool)after["read_only"]);
+        var answer = hired ? "accepted" : ended ? "rejected" : rewritten ? "countered" : "pending";
+        return new JsonObject
+        {
+            ["verified"] = true,   // the offer was sent and the answer recorded (accepted, countered, rejected or pending)
+            ["offered"] = new JsonObject { ["wage"] = offered["wage"].Copy(), ["job"] = offered["job"].Copy(), ["event"] = ev },
+            ["answer"] = answer,
+            ["counter"] = answer == "countered" ? new JsonObject { ["wage"] = after["wage"].Copy(), ["job"] = after["job"].Copy() } : null,
+            ["patience"] = after["patience"].Copy(),
+            ["before"] = before, ["after"] = after,
+        };
+    }
+
+    private static async Task<bool> EmployedByHuman(int uid, CancellationToken ct)
+    {
+        await using var scope = new ReadScope(ct);
+        var p = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { "Club" }, 2000);
+        var o = (await scope.Collect(new List<Plant> { p }))[0];
+        var club = await Reader.Main(() => FmAssistant.Tree.HumanClubUid(), ct);
+        return (o["Club"] as JsonObject)?["uid"].Int() == club;
+    }
 }

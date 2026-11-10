@@ -371,8 +371,17 @@ contract after promises).
 | `act_shortlist_add` | `uid`, `months=0` (0 = indefinite, 1, 3, 6, 12) | `{verified, before: {shortlisted, count}, after, performed, answer?}`; `answer: "already"` when nothing was needed | ~10 s |
 | `act_shortlist_remove` | `uid` | same shape; confirms the game's dialog | ~13 s |
 | `act_scout_request` | `uid`, `scout_uid`, `duration=week\|month\|full` | `{verified, answer: "pending"\|"already", before: {being_scouted}, after, performed}`; the scout must be one the action lists | ~10 s |
+| `act_staff_approach` | `uid` (non-player) | `{verified, negotiation, demand: {job, wage, end_date}}`; the prefilled terms are the demand | ~10–13 s |
+| `act_staff_offer` | `uid`, `wage` (base currency) | `{verified, offered: {wage, job, event}, answer, counter, patience, before, after}` | ~19 s |
 
+Op details:
 
+- `act_staff_offer` needs the person's negotiation on screen (`act_staff_approach` first) and not read-only. `wage`
+  above the board maximum → `precondition` "wage X exceeds the board maximum Y; nothing sent". The job stays as
+  prefilled; the wage is stepped with the screen's `-`/`+` to the largest step ≤ `wage`. One offer (propose, or
+  finalize when the terms equal the demand). `answer`: `accepted` (now employed by the human club), `rejected`
+  (patience 0, or the screen closed without read-only), `countered` (the reply rewrote the wage or the base terms;
+  `counter` has the new terms), `pending` (read-only). A counter is never answered.
 
 Negotiation = `{open, on_screen, stage, wage, job, end_date, board_max_wage, wage_over_board_max, patience: {status,
 value}, changed_by_other_party, read_only, key_info: [text]}`, read headless from `Person.ContractEditSession`
