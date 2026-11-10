@@ -59,7 +59,7 @@ Rules enforced by the plugin:
 | `nav_open` | `panel` (dev only while `~/.fm-assistant/dev-nav` exists: `guid`, or `subtab` = GUID of a visible secondary tab) | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`, `PlayerSearchReport`; `wrong-screen` if it did not open | main + waits |
 | `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
 
-| `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots}`; see below | main + polling |
+| `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots, wage_structure}`; see below | main + polling |
 | `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, today, count, players: [Player]}` (`today` = `game.CurrentGameDate`, as in `training`); see below | main + polling |
 | `staff_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Staff]}`; opens `StaffSearchReport` itself | main + polling |
 | `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
@@ -90,6 +90,13 @@ Human club (`Human.Club` uid) props: `TransferBudget`, `WageBudget` (per week), 
 `StaffRecruitmentSubGroup`, `StaffMedicalSubGroup`: `Count` → `used`, `MaxValue` → `max` (the board's target;
 `used > max` happens), `ShortString` → `summary`, `StaffSubGroupCountFeedbackString` → `board_feedback`,
 `StaffSubGroupJobsData[]` → `jobs: [{job, job_type, used, max}]`.
+`WagesData.PlayerTypeWageData` (required) → `wage_structure: [{status, count, average, highest, lowest, advised_max, total, over}]`,
+one row per squad status in the game's order: `status` = `Name` (localized), `count` = `Quantity`, `average`/`highest`/
+`lowest`/`advised_max` = `AverageBasicWage`/`HighestBasicWage`/`LowestBasicWage`/`AdvisedMaxBasicWage` (display strings
+only, the game gives no number), `total` = `{display: TotalBasicWage, value: TotalBasicWageValue}` (base currency),
+`over` = `IsOverWages`. 17 rows on build 27.0.0.2493426, rows with `count` 0 included (their strings are a placeholder
+minimum, `total.value` 0). Two rows can share a `status` display (emergency backup, outfield and goalkeeper), and the
+last row is the overall total (all statuses; `count` = whole squad), not a status.
 Known gap: the ClubScreen "transfer/wage budget" tile showed Rp5,75M while `TransferBudget` formats to Rp5,71M
 (build 27.0.0.2493426); the tile's source is a VisualFunction not identified yet. Finance (`Keuangan`) is a
 secondary-tab dropdown (`SecondaryTabDropdownButton`, no SIButton), not reachable by `ClickSubtab` yet.
@@ -102,9 +109,18 @@ mask, multi-position; decoded by `fm_assistant.positions`), `Condition` (percent
 players read about −360…−270 on build 27.0.0.2493426, higher = more tired; no threshold used yet), `IsInjured`
 (`"True"`/`"False"`), `CurrentInjury` (`InjuryDescription`, `InjuryReturnDays`), visible `Attribute*` (47 names, see
 `Squad.Attributes`; off the ball is `AttributeMovement`; hidden personality attributes are never requested),
-`FullContract` → `Wage` (`{display, sort}` → Money), `EndDate`, `ContractLength` (total contract length in days, start → end; NOT days left — use `EndDate`).
+`FullContract` → `Wage` (`{display, sort}` → Money), `EndDate`, `ContractLength` (total contract length in days, start → end; NOT days left — use `EndDate`),
+`StartDate`, `AgreedPlayingTime` (squad status `{display, sort}` → `squad_status: {display, code}`; `display` localized,
+logic uses `code`), `MinimumFeeReleaseClauseValue` (`{display, sort}` → Money; `sort` 0 / display `"-"` = none →
+`release_clause: null`), `HasRenewalOffer` (→ `renewal_offer` bool|null).
 `Player = {uid, name, age, position_mask, attributes, condition, fatigue, injured, injury: {description,
-return_days}|null, contract: {wage, end_date, length_days}}`.
+return_days}|null, contract: {wage, end_date, length_days, start_date, squad_status, release_clause, renewal_offer}}`.
+
+`AgreedPlayingTime.sort` codes seen live (build 27.0.0.2493426; English meaning inferred from the localized label and the
+FM status list, not read from the game): 2 on loan (currently loaned out), 5 emergency backup, 7 youngster,
+10 breakthrough prospect, 11 backup (goalkeeper), 13 rotation / fringe player, 19 first-team backup (impact sub),
+21 first-choice goalkeeper, 22 regular starter, 23 important player, 24 star player. Other codes (squad player, future
+prospect, cup goalkeeper, not needed, trial) exist but were not held by any player in this save.
 
 ### staff_search
 

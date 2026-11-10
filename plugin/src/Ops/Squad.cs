@@ -29,7 +29,7 @@ internal static class Squad
     };
     private static readonly string[] PlayerProps = new[] { "Name", "Age", "Position", "Condition", "Fatigue", "IsInjured", "CurrentInjury", "FullContract" }
         .Concat(Attributes.Select(a => "Attribute" + a)).ToArray();
-    private static readonly string[] ContractProps = { "Wage", "EndDate", "ContractLength" };
+    private static readonly string[] ContractProps = { "Wage", "EndDate", "ContractLength", "StartDate", "AgreedPlayingTime", "MinimumFeeReleaseClauseValue", "HasRenewalOffer" };
 
     /// {"team": "first"|"reserve"|"youth"} -> {club, team, today, count, players: [Player]} (docs/protocol.md "squad").
     public static async Task<JsonNode> Read(JsonObject a, CancellationToken ct)
@@ -103,6 +103,13 @@ internal static class Squad
                 ["wage"] = SortedMoney(c["Wage"]),
                 ["end_date"] = c["EndDate"].Copy(),
                 ["length_days"] = c["ContractLength"].Copy(),
+                ["start_date"] = c["StartDate"].Copy(),
+                ["squad_status"] = c["AgreedPlayingTime"] is JsonObject st
+                    ? new JsonObject { ["display"] = st["display"].Copy(), ["code"] = st["sort"].Int() } : null,
+                // sort 0 / display "-" = no release clause (never a zero fee).
+                ["release_clause"] = c["MinimumFeeReleaseClauseValue"] is JsonObject rc && rc["sort"] is JsonValue rs
+                    && rs.TryGetValue<double>(out var fee) && fee > 0 ? SortedMoney(rc) : null,
+                ["renewal_offer"] = Bool(c["HasRenewalOffer"]),
             },
         };
     }

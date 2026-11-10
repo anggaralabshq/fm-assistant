@@ -8,21 +8,46 @@ namespace FmAssistant;
 
 internal static class Club
 {
-    private static readonly string[] ClubProps = { "Name", "TransferBudget", "WageBudget", "CommittedWageSpending", "RemainingWageBudget", "OverallBalance", "FinancialStatus", "MainTeam" };
+    private static readonly string[] ClubProps = { "Name", "TransferBudget", "WageBudget", "CommittedWageSpending", "RemainingWageBudget", "OverallBalance", "FinancialStatus", "MainTeam", "WagesData" };
     private static readonly (string Key, string Prop)[] Groups =
         { ("coaching", "StaffCoachingSubGroup"), ("recruitment", "StaffRecruitmentSubGroup"), ("medical", "StaffMedicalSubGroup") };
 
     public static Task<int> HumanUid(CancellationToken ct) => Reader.MainR(() => FmAssistant.Tree.HumanClubUid() is int u
         ? R<int>.Ok(u) : R<int>.Err("no-career-loaded", "load a career first"), ct);
 
-    /// {} -> {uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining: Money, staff_slots}
+    /// WagesData.PlayerTypeWageData: one row per squad status. Only TotalBasicWage has a number (TotalBasicWageValue);
+    /// the other wage fields are the game's display strings.
+    private static JsonArray WageStructure(JsonNode wages)
+    {
+        var rows = new JsonArray();
+        if ((wages as JsonObject)?["PlayerTypeWageData"] is not JsonArray l) return rows;
+        foreach (var r in l)
+        {
+            if (r is not JsonObject o) continue;
+            var value = o["TotalBasicWageValue"];
+            rows.Add(new JsonObject
+            {
+                ["status"] = o["Name"].Copy(),
+                ["count"] = o["Quantity"].Int(),
+                ["average"] = o["AverageBasicWage"].Copy(),
+                ["highest"] = o["HighestBasicWage"].Copy(),
+                ["lowest"] = o["LowestBasicWage"].Copy(),
+                ["advised_max"] = o["AdvisedMaxBasicWage"].Copy(),
+                ["total"] = value is JsonValue ? new JsonObject { ["display"] = o["TotalBasicWage"].Copy(), ["value"] = value.Copy() } : null,
+                ["over"] = Squad.Bool(o["IsOverWages"]),
+            });
+        }
+        return rows;
+    }
+
+    /// {} -> {uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining: Money, staff_slots, wage_structure}
     public static async Task<JsonNode> Read(JsonObject a, CancellationToken ct)
     {
         var uid = await HumanUid(ct);
         await using var scope = new ReadScope(ct);
         var cp = await scope.ReadOne(() => Reader.ClubRef(uid), ClubProps);
         var c = (await scope.Collect(new List<Plant> { cp }))[0];
-        Reader.Require(c, "club", "TransferBudget", "WageBudget", "CommittedWageSpending", "RemainingWageBudget", "MainTeam");
+        Reader.Require(c, "club", "TransferBudget", "WageBudget", "CommittedWageSpending", "RemainingWageBudget", "MainTeam", "WagesData");
         var team = cp["MainTeam"]?.Value;
         var tp = await scope.ReadOne(() => team, new[] { Groups[0].Prop, Groups[1].Prop, Groups[2].Prop });
         var t = (await scope.Collect(new List<Plant> { tp }))[0];
@@ -54,6 +79,7 @@ internal static class Club
                 ["wage_committed"] = Money.Of(c["CommittedWageSpending"]),
                 ["wage_remaining"] = Money.Of(c["RemainingWageBudget"]),
                 ["staff_slots"] = slots,
+                ["wage_structure"] = WageStructure(c["WagesData"]),
             };
         }, ct);
     }
