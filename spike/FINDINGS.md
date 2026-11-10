@@ -144,4 +144,14 @@ Open items for Phase 1: per-session WebSocket token; startup crash root cause; s
 
 ## Re-test after release
 
-Pending: FM27 full release is 2026-11-10. Re-run Task 1 Step 6, Task 2 Step 7, `check_squad.py`, `check_staff.py`, `check_training.py`, then the original-app signature check, and record results here per build.
+Owner decided on 2026-11-10 to build Phase 1a on the pre-release build instead of waiting (Steam still
+showed `releasestate: prerelease`, local Steam build 26340721 from 2026-11-07).
+
+| Build | Date | Result |
+|---|---|---|
+| 27.0.0.2493426 (pre-release, baseline for Phase 1a) | 2026-11-10 | `codesign --verify --deep --strict fm.app` valid; `fm game restart --load` OK (no owner input); `fm doctor` all ok; `fm/live/check_protocol.py` OK. Spike checks `check_squad/staff/training.py` need the spike plugin (removed: it fights for port 7788) — superseded by the Phase 1a Task 6, 7 and 9 live checks. |
+| release build | pending | run `fm doctor`, `scripts/smoke.sh` and every `fm/live/check_*.py`; add the build to `Meta.TestedBuilds` when they pass |
+
+Phase 1a observation: one owner-launched session had the plugin loaded and bindings captured but no main-thread
+tick at all (every main-thread op timed out, no errors logged); the next launch ticked normally. Op `diag` now
+reports the tick count without needing the main thread.
