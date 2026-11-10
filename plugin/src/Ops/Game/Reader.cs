@@ -47,6 +47,7 @@ internal sealed class ReadScope : IAsyncDisposable
     public async Task<List<Plant>> ReadMany(List<Func<TypedValue>> parents, string[] props, int waitMs = 4000,
         Func<Dictionary<string, TypedValue>> ctx = null)
     {
+        ctx ??= Contexts.Values(props);   // context-bound props (Contexts table) get the viewer's contexts
         var plants = await Reader.MainR(() =>
         {
             if (!Native.Resolve(out var problem)) return R<List<Plant>>.Err("binding-api-changed", problem);

@@ -37,6 +37,7 @@ internal static class OpsEntry
         ["form"] = (Form.Read, 90),
         ["fixtures"] = (Fixtures.Read, 60),
         ["loans"] = (Loans.Read, 60),
+        ["ctx_check"] = (Contexts.Check, 30),
         ["ctx_probe"] = (DevOnly(Spike.CtxProbe), 10),
         ["ctx_names"] = (DevOnly(Spike.CtxNames), 10),
         ["stars_dump"] = (DevOnly(Spike.StarsDump), 10),

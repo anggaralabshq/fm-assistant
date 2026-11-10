@@ -69,6 +69,7 @@ Rules enforced by the plugin:
 | `form` | `team=first\|reserve\|youth` | `{today, team: {uid, name, kind}, players: [Form], concerns: [uid], atmosphere: {level, text}\|null}`; see below | main + polling |
 | `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation}`; see below | main + polling |
 | `loans` | – | `{today, out: [Loan], intake: {date, days}}`; see below | main + polling |
+| `ctx_check` | – | `{checked: int, mismatches: [{prop, expected: [ctx], game: [ctx]}]}`; startup check of the binding-context table (`Contexts.cs`) against `Bindings.GetHandler`; no channel opened; see "Binding contexts" | main |
 
 There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
 manager cannot see (hidden attributes), so they answer only in dev mode (file `~/.fm-assistant/dev-nav` exists);
@@ -80,6 +81,31 @@ path (cancel, throw), by a cleanup job queued after any pending plant job.
 
 Client timeouts: the CLI waits each op's server timeout + 5 s. No answer by then → error code `timeout`; the
 plugin's connection limit (HTTP 503) → `busy`. Neither is reported as "game not running".
+
+### Binding contexts
+
+Some props are context-bound: their data handler (`Bindings.GetHandler`) names binding contexts that a panel
+normally provides. `Contexts.cs` holds a fixed table (prop → contexts, from `docs/discovery/2026-11-10-phase1d.md`);
+`ReadScope.ReadMany` plants the union of the contexts the requested props need as sibling nodes of the parent
+(`Reader.PlantOne(..., ctx)`), so they land headless. Values: `team` and `TeamRequestingReport` = `Human.Team`
+(always the viewer's team: star ranges and morale are masked by it), `human` = `Human` (a `PersonReference`),
+`club` = `Human.Club`, `Boolean` = `false` (true reads the same), `StringType` = `""`, `PortalMessagesTab` = the
+inbox tab (supplied by `inbox`).
+
+| source | props | contexts |
+|---|---|---|
+| person | `Morale`, `MoraleString`, `CurrentAbilityStarRange`, `PotentialAbilityStarRange` | `team`, `human` |
+| person | `CanViewHappinessInfo`, `HappinessPlayingTime`, `HappinessClub`, `HappinessManagement`, `HappinessTraining` | `human`, `team` |
+| person | `TacticsRoleName` | `team` |
+| team | `Tactic` | `Boolean` |
+| team | `HasTeamReport` | `TeamRequestingReport` |
+| human | `HumanPortalFilteredMessages` | `team`, `StringType`, `PortalMessagesTab` |
+| human | `NumberUnreadMessages` | `team` |
+
+`ctx_check` asks `GetHandler` for every row on `Human` (person/human rows) and `Human.Team` (team rows) and lists
+each prop whose context set differs (order ignored): `game` is the game's list, or `(unknown-property)` /
+`(no-handler)`. `mismatches: []` = the table matches this build. A mismatch means a context was renamed: the
+affected props would read `_missing`.
 
 ### Money
 
