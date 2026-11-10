@@ -37,5 +37,17 @@ internal static class OpsEntry
         ["form"] = (Form.Read, 90),
         ["fixtures"] = (Fixtures.Read, 60),
         ["loans"] = (Loans.Read, 60),
+        ["ctx_check"] = (Contexts.Check, 30),
+        ["inbox"] = (Inbox.Read, 30),
+        ["tactic"] = (Tactic.Read, 30),
+        ["ctx_probe"] = (DevOnly(Spike.CtxProbe), 10),
+        ["ctx_names"] = (DevOnly(Spike.CtxNames), 10),
+        ["stars_dump"] = (DevOnly(Spike.StarsDump), 10),
+        ["stars_settings"] = (DevOnly(Spike.StarsSettings), 10),
+        ["ui_texts"] = (DevOnly(Spike.UiTexts), 10),
+        ["profile_info"] = (DevOnly(Spike.ProfileInfo), 10),
+        ["tree_probe"] = (DevOnly(Spike.TreeProbe), 10),
+        ["profile_open"] = (DevOnly(Exclusive(Spike.ProfileOpen)), 20),
+        ["team_panel_open"] = (DevOnly(Exclusive(Spike.TeamPanelOpen)), 20),
     };
 }

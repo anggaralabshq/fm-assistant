@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 
+from . import stars
 from .positions import SLOTS, covers
 
 USER_DEPTH = Path.home() / ".fm-assistant" / "depth.json"
@@ -30,10 +31,13 @@ def depth(players: list, minimums: dict) -> dict:
 
 
 def targets(slots: list, prospects: list, top: int = 5) -> dict[str, list]:
-    """Per slot, prospects covering it: budget-known before budget-unknown, then younger first (unknown age last)."""
+    """Per slot, prospects covering it, best first: budget-known, then scouted potential (max, in stars), then
+    current (max), then younger. Unknown stars (unscouted, -1) sort after every known value, never as 0 stars."""
     def key(p):
+        st = stars.of(p.get("stars_raw"))
+        pot, cur = (st["potential"] or [None, None])[1], (st["current"] or [None, None])[1]
         age = p.get("age")
-        return (bool(p.get("budget_unknown")), age is None, age or 0)
+        return (bool(p.get("budget_unknown")), pot is None, -(pot or 0), cur is None, -(cur or 0), age is None, age or 0)
 
     return {s["slot"]: sorted((p for p in prospects if covers(p.get("position_mask") or 0, s["slot"])), key=key)[:top]
             for s in slots}

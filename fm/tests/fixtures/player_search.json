@@ -1,9 +1,92 @@
-{"count": 3, "returned": 3, "truncated": false, "rows": [
- {"uid": 21, "name": "Eko Saputra", "age": 20, "position_mask": 8192, "club_uid": 900555, "value": {"display": "Rp150Jt", "value": 150000},
-  "asking_price": {"display": "Rp200Jt", "value": 200000}, "wage": {"display": "Rp5Jt p/mgg", "value": 2000}, "contract_end": "2027-06-30",
-  "attributes": {"AttributePassing": "8-12", "AttributeVision": 14}, "scout_rating": null},
- {"uid": 22, "name": "Faisal Hakim", "age": 25, "position_mask": 16384, "club_uid": 900556, "value": {"display": "Rp900Jt", "value": 900000},
-  "asking_price": null, "wage": {"display": "Rp20Jt p/mgg", "value": 8000}, "contract_end": "2028-06-30",
-  "attributes": {"AttributeFinishing": 16}, "scout_rating": null},
- {"uid": 23, "name": "Gilang Ramadhan", "age": 18, "position_mask": 16, "club_uid": null, "value": null,
-  "asking_price": null, "wage": null, "contract_end": null, "attributes": {"AttributeTackling": null}, "scout_rating": null}]}
+{
+  "count": 3,
+  "returned": 3,
+  "truncated": false,
+  "rows": [
+    {
+      "uid": 21,
+      "name": "Eko Saputra",
+      "age": 20,
+      "position_mask": 8192,
+      "club_uid": 900555,
+      "value": {
+        "display": "Rp150Jt",
+        "value": 150000
+      },
+      "asking_price": {
+        "display": "Rp200Jt",
+        "value": 200000
+      },
+      "wage": {
+        "display": "Rp5Jt p/mgg",
+        "value": 2000
+      },
+      "contract_end": "2027-06-30",
+      "attributes": {
+        "AttributePassing": "8-12",
+        "AttributeVision": 14
+      },
+      "scout_rating": null,
+      "stars_raw": {
+        "current": {
+          "min": 15,
+          "max": 16
+        },
+        "potential": {
+          "min": 15,
+          "max": 16
+        }
+      }
+    },
+    {
+      "uid": 22,
+      "name": "Faisal Hakim",
+      "age": 25,
+      "position_mask": 16384,
+      "club_uid": 900556,
+      "value": {
+        "display": "Rp900Jt",
+        "value": 900000
+      },
+      "asking_price": null,
+      "wage": {
+        "display": "Rp20Jt p/mgg",
+        "value": 8000
+      },
+      "contract_end": "2028-06-30",
+      "attributes": {
+        "AttributeFinishing": 16
+      },
+      "scout_rating": null,
+      "stars_raw": {
+        "current": {
+          "min": 12,
+          "max": 13
+        },
+        "potential": {
+          "min": 12,
+          "max": 13
+        }
+      }
+    },
+    {
+      "uid": 23,
+      "name": "Gilang Ramadhan",
+      "age": 18,
+      "position_mask": 16,
+      "club_uid": null,
+      "value": null,
+      "asking_price": null,
+      "wage": null,
+      "contract_end": null,
+      "attributes": {
+        "AttributeTackling": null
+      },
+      "scout_rating": null,
+      "stars_raw": {
+        "current": null,
+        "potential": null
+      }
+    }
+  ]
+}

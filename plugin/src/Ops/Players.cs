@@ -15,9 +15,9 @@ internal static class Players
     public const string Panel = "PlayerSearchReport", Table = "playertable";
     private const int Batch = 20, DefaultMax = 200, HardMax = 1000;
     private static readonly string[] Props = new[] { "Name", "Age", "Position", "Club", "ScoutRecommendation", "TransferValueRange", "FullContract" }
-        .Concat(Squad.Attributes.Select(a => "Attribute" + a)).ToArray();
+        .Concat(Squad.StarProps).Concat(Squad.Attributes.Select(a => "Attribute" + a)).ToArray();
 
-    /// {"max": 200} -> {count, returned, truncated, rows: [Prospect]} (docs/protocol.md "player_search").
+    /// {"max": 200} -> {count, returned, truncated, rows: [Prospect], warnings} (docs/protocol.md "player_search").
     public static async Task<JsonNode> Search(JsonObject a, CancellationToken ct)
     {
         var max = Meta.Int(a, "max", DefaultMax, 1, HardMax);
@@ -31,6 +31,7 @@ internal static class Players
             return (ListRead.Count(w), ids);
         }, ct);
         var rows = new JsonArray();
+        var warnings = new JsonArray();
         for (var i = 0; i < uids.Count; i += Batch)
         {
             var chunk = uids.Skip(i).Take(Batch).ToList();
@@ -41,12 +42,12 @@ internal static class Players
             var res = await scope.Collect(plants);
             var cRes = await scope.Collect(cPlants);
             var money = await Reader.Main(() => res.Select(o => Money.Of((o["TransferValueRange"] as JsonObject)?["AskingPrice"])).ToList(), ct);
-            for (var j = 0; j < chunk.Count; j++) rows.Add(Row(chunk[j], res[j], cRes[j], money[j]));
+            for (var j = 0; j < chunk.Count; j++) rows.Add(Row(chunk[j], res[j], cRes[j], money[j], warnings));
         }
-        return new JsonObject { ["count"] = count, ["returned"] = rows.Count, ["truncated"] = rows.Count < count, ["rows"] = rows };
+        return new JsonObject { ["count"] = count, ["returned"] = rows.Count, ["truncated"] = rows.Count < count, ["rows"] = rows, ["warnings"] = warnings };
     }
 
-    private static JsonObject Row(int uid, JsonObject o, JsonObject c, JsonNode asking)
+    private static JsonObject Row(int uid, JsonObject o, JsonObject c, JsonNode asking, JsonArray warnings)
     {
         var attrs = new JsonObject();
         foreach (var a in Squad.Attributes) attrs[a] = o["Attribute" + a].Copy();
@@ -69,6 +70,7 @@ internal static class Players
             ["contract_end"] = c["EndDate"].Copy(),
             ["value_knowledge"] = know == null ? null : new JsonObject { ["level"] = know["ActualValue"].Copy(), ["max"] = know["MaxValue"].Copy(), ["text"] = know["Text"].Copy() },
             ["scout_rating"] = o["ScoutRecommendation"].Copy(),
+            ["stars_raw"] = Squad.StarsRaw(uid, o, warnings),
             ["attributes"] = attrs,
         };
     }

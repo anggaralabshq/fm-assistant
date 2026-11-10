@@ -1,0 +1,113 @@
+{
+ "name": "Serangan Cepat",
+ "mentality": "Positif",
+ "slots": [
+  {
+   "index": 0,
+   "position_mask": 1,
+   "position_label": "GK",
+   "role": "Penjaga Gawang",
+   "player": {
+    "uid": 101,
+    "name": "Pemain 101"
+   }
+  },
+  {
+   "index": 1,
+   "position_mask": 4,
+   "position_label": "D (R)",
+   "role": "Bek Sayap",
+   "player": {
+    "uid": 102,
+    "name": "Pemain 102"
+   }
+  },
+  {
+   "index": 2,
+   "position_mask": 16,
+   "position_label": "D (C)",
+   "role": "Bek Tengah",
+   "player": {
+    "uid": 103,
+    "name": "Pemain 103"
+   }
+  },
+  {
+   "index": 3,
+   "position_mask": 16,
+   "position_label": "D (C)",
+   "role": "Bek Tengah",
+   "player": {
+    "uid": 104,
+    "name": "Pemain 104"
+   }
+  },
+  {
+   "index": 4,
+   "position_mask": 8,
+   "position_label": "D (L)",
+   "role": "Bek Sayap",
+   "player": {
+    "uid": 105,
+    "name": "Pemain 105"
+   }
+  },
+  {
+   "index": 5,
+   "position_mask": 128,
+   "position_label": "DM",
+   "role": "Gelandang Bertahan",
+   "player": {
+    "uid": 106,
+    "name": "Pemain 106"
+   }
+  },
+  {
+   "index": 6,
+   "position_mask": 1024,
+   "position_label": "M (C)",
+   "role": "Box to Box",
+   "player": {
+    "uid": 107,
+    "name": "Pemain 107"
+   }
+  },
+  {
+   "index": 7,
+   "position_mask": 1024,
+   "position_label": "M (C)",
+   "role": "Playmaker",
+   "player": {
+    "uid": 108,
+    "name": "Pemain 108"
+   }
+  },
+  {
+   "index": 8,
+   "position_mask": 2048,
+   "position_label": "AM (R)",
+   "role": "Winger",
+   "player": {
+    "uid": 109,
+    "name": "Pemain 109"
+   }
+  },
+  {
+   "index": 9,
+   "position_mask": 4096,
+   "position_label": "AM (L)",
+   "role": "Winger",
+   "player": null
+  },
+  {
+   "index": 10,
+   "position_mask": 16384,
+   "position_label": "ST (C)",
+   "role": "Target Man",
+   "player": {
+    "uid": 111,
+    "name": "Pemain 111"
+   }
+  }
+ ]
+}

@@ -1,18 +1,101 @@
 {
   "today": "2026-09-14",
   "out": [
-    {"uid": 11, "name": "Eko Saputra", "age": 19, "club": {"uid": 900301, "name": "Rawa Tengah"},
-     "start_date": "2026-07-20", "end_date": "2027-06-30", "apps": 0, "rating": 0.0, "happiness": 12,
-     "agreed_time": "Regular starter", "actual_time": "-"},
-    {"uid": 12, "name": "Fajar Mulyadi", "age": 21, "club": {"uid": 900302, "name": "Pulau Kecil"},
-     "start_date": "2026-08-01", "end_date": "2027-01-31", "apps": 5, "rating": 6.9, "happiness": 14,
-     "agreed_time": "Rotation", "actual_time": "Rotation"},
-    {"uid": 13, "name": "Gani Hartono", "age": 18, "club": {"uid": 900303, "name": "Danau Utara"},
-     "start_date": "2026-09-10", "end_date": "2027-06-30", "apps": 0, "rating": 0.0, "happiness": null,
-     "agreed_time": "N/A", "actual_time": "N/A"},
-    {"uid": 14, "name": "Hasan Lubis", "age": 20, "club": {"uid": 900304, "name": "Gunung Jaya"},
-     "start_date": null, "end_date": null, "apps": 0, "rating": 0.0, "happiness": null,
-     "agreed_time": "-", "actual_time": "-"}
+    {
+      "uid": 11,
+      "name": "Eko Saputra",
+      "age": 19,
+      "club": {
+        "uid": 900301,
+        "name": "Rawa Tengah"
+      },
+      "start_date": "2026-07-20",
+      "end_date": "2027-06-30",
+      "apps": 0,
+      "rating": 0.0,
+      "happiness": 12,
+      "agreed_time": "Regular starter",
+      "actual_time": "-",
+      "stars_raw": {
+        "current": {
+          "min": 13,
+          "max": 14
+        },
+        "potential": {
+          "min": 17,
+          "max": 18
+        }
+      }
+    },
+    {
+      "uid": 12,
+      "name": "Fajar Mulyadi",
+      "age": 21,
+      "club": {
+        "uid": 900302,
+        "name": "Pulau Kecil"
+      },
+      "start_date": "2026-08-01",
+      "end_date": "2027-01-31",
+      "apps": 5,
+      "rating": 6.9,
+      "happiness": 14,
+      "agreed_time": "Rotation",
+      "actual_time": "Rotation",
+      "stars_raw": {
+        "current": {
+          "min": 12,
+          "max": 12
+        },
+        "potential": {
+          "min": 14,
+          "max": 14
+        }
+      }
+    },
+    {
+      "uid": 13,
+      "name": "Gani Hartono",
+      "age": 18,
+      "club": {
+        "uid": 900303,
+        "name": "Danau Utara"
+      },
+      "start_date": "2026-09-10",
+      "end_date": "2027-06-30",
+      "apps": 0,
+      "rating": 0.0,
+      "happiness": null,
+      "agreed_time": "N/A",
+      "actual_time": "N/A",
+      "stars_raw": {
+        "current": null,
+        "potential": null
+      }
+    },
+    {
+      "uid": 14,
+      "name": "Hasan Lubis",
+      "age": 20,
+      "club": {
+        "uid": 900304,
+        "name": "Gunung Jaya"
+      },
+      "start_date": null,
+      "end_date": null,
+      "apps": 0,
+      "rating": 0.0,
+      "happiness": null,
+      "agreed_time": "-",
+      "actual_time": "-",
+      "stars_raw": {
+        "current": null,
+        "potential": null
+      }
+    }
   ],
-  "intake": {"date": "2027-01-05", "days": 113}
+  "intake": {
+    "date": "2027-01-05",
+    "days": 113
+  }
 }

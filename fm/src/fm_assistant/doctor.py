@@ -15,7 +15,14 @@ FEATURES: list[tuple[str, str, dict]] = [
     ("staff search read", "staff_search", {"max": 20}),
     ("player search read", "player_search", {"max": 20}),
     ("training read", "training", {}),
+    ("binding contexts", "ctx_check", {}),
 ]
+
+
+def _ctx_detail(res: dict) -> str | None:
+    """None when every expected binding context still matches the game; else a detail naming the props."""
+    bad = res.get("mismatches") or []
+    return ("mismatch: " + ", ".join(m["prop"] for m in bad)) if bad else None
 
 
 def run() -> list[dict]:
@@ -46,8 +53,9 @@ def run() -> list[dict]:
     slow = FmClient(timeout=95)   # feature reads may navigate the UI first
     for name, op, args in FEATURES:
         try:
-            slow.call(op, **args)
-            add(name, True)
+            res = slow.call(op, **args)
+            bad = _ctx_detail(res) if op == "ctx_check" else None
+            add(name, bad is None, bad or "")
         except FmError as e:
             add(name, False, f"{e.code}: {e.detail}")
     return out

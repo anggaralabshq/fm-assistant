@@ -33,6 +33,8 @@ def text(res: dict) -> str:
     out = ["Next: " + line(nxt, today)]
     if res.get("threat"):
         out.append("Assistant: " + res["threat"])
+    if res.get("report") is not None:
+        out.append("Scouting report on the opponent: " + ("available" if res["report"] else "none yet"))
     if res.get("opponent_formation"):
         out.append("Most used formation: " + res["opponent_formation"])
     if res.get("upcoming"):

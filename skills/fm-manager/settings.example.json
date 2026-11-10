@@ -18,7 +18,11 @@
       "Bash(fm --json squad loans)",
       "Bash(fm --json players search*)",
       "Bash(fm --json training show*)",
-      "Bash(fm --json training load)"
+      "Bash(fm --json training load)",
+      "Bash(fm --json inbox*)",
+      "Bash(fm --json tactic)",
+      "Bash(fm --json squad rotation*)",
+      "Bash(fm --json trends)"
     ],
     "deny": [
       "Bash(fm call*)",

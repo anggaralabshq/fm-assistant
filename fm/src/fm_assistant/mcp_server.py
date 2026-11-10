@@ -75,6 +75,13 @@ TOOLS = (
     Tool("squad_contracts", ("squad", "contracts"), "Squad status, contract end, release clause, game wage structure.", (TEAM,)),
     Tool("squad_form", ("squad", "form"), "Season and last-five form, unhappy players, club atmosphere.", (TEAM,)),
     Tool("squad_loans", ("squad", "loans"), "Players out on loan with games and rating; youth intake date."),
+    Tool("inbox", ("inbox",), "Inbox messages, newest first, with unread and important marks.",
+         (P("since", str, "--since", doc="Only messages on or after this date (YYYY-MM-DD)."),
+          P("unread", bool, "--unread", doc="Unread messages only."), MAX)),
+    Tool("tactic", ("tactic",), "Active tactic: slots, roles, who plays them, out-of-position and tired facts."),
+    Tool("squad_rotation", ("squad", "rotation"), "Congested fixtures ahead: tired or injured XI players and options.",
+         (P("days", int, "--days", doc="Window in days (default 7)."),)),
+    Tool("trends", ("trends",), "Saves today's snapshot, then compares with the latest earlier one."),
 )
 
 

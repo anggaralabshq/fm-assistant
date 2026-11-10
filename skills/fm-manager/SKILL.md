@@ -29,6 +29,10 @@ Answer in Indonesian. Never tactics, never decide for the owner.
 | Next opponent / fixtures | `fixtures` |
 | Contract priorities, squad status, wage structure | `club budget`, `squad contracts`, `squad form` (ratings) |
 | Loans out, youth intake | `squad loans` |
+| Messages, "ada pesan penting?" | `inbox` (`--json` for the message `body`) |
+| Who plays where, out of position | `tactic` |
+| Rotation before busy weeks | `squad rotation` |
+| Changes since last time | `trends` |
 
 Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `physio`, etc.
 
@@ -77,10 +81,20 @@ Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `phy
 - Loans: `happiness` is the game's number (no scale given: quote, don't judge). `agreed_time` /
   `actual_time` null = not reported yet.
 - Targets: already within budget (known price ≤ transfer budget, known wage ≤ wage room); `budget_unknown`
-  rows go in a separate list. Order = budget known first, then younger: it is NOT a quality ranking. There is
-  no score: never invent one; quote `scout_rating` and say that scout reports decide quality. Each target fits
-  the budget on its own, not together with the others. `searched.truncated: true` → apply the truncation rule.
-  `wage` is the Player Database estimate, not a demand; `asking_price: null` → quote `value`.
+  rows go in a separate list. Order = budget known first, then the scout's star estimate (potential, then
+  current), unscouted ("?") last, then younger. Stars are the scout's estimate, not the truth: write a range as
+  "2,5–3 bintang (perkiraan scout)"; "?" = belum discout, never 0. There is no other score: never invent one.
+  Each target fits the budget on its own, not together with the others. `searched.truncated: true` → apply the
+  truncation rule. Only quote counts that are in the output. `wage` is the Player Database estimate, not a
+  demand; `asking_price: null` → quote `value`.
+- Inbox: quote titles exactly; `!` = the game marks it important, `*` = unread. The text view shows titles only;
+  `fm --json inbox` has each message's `body` (first 600 characters): read it before summarising a message.
+- Morale/happiness: `morale` is the game's value and text (quote both). `unhappy with` lists areas the game's
+  own text calls negative (e.g. training "Khawatir"): name the area, never guess the reason.
+- Tactic: facts only (slot, role, player, natural yes/no, condition). Never suggest a formation, role or
+  lineup change.
+- Rotation: present the `options` as choices with their condition and last-five rating; the owner decides.
+- Trends: changes between two in-game dates; quote `+/-` values as given and the day span.
 
 ## Answer shape
 

@@ -54,19 +54,27 @@ Rules enforced by the plugin:
 | `ui_dump` | `panel?`, `depth=12`, `max=400` | visible element tree `{name, type, text, bind, x, y, w, h, children}` | main |
 | `prop_check` | `names[]` | `{name: property id}`; 0 = unknown in this build | main |
 | `tree` | `path=""`, `depth=2`, `max=400` | binding tree `{name, type, value, children}` | main |
-| `read` | `ref: person\|club\|team\|path`, `uid` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}` | decoded props; unresolved ones under `_missing` | main + polling |
+| `read` | `ref: person\|club\|team\|path\|persons`, `uid` / `uids[]` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}`, `ctx: {name: {ref\|path\|int\|bool\|string, uid\|path\|value}}` (binding contexts, see phase 1d), `each: {listprop: [subprops]}`, `max_each=50`, `probe: [names]` | decoded props; unresolved ones under `_missing` | main + polling |
+| `ctx_probe` / `tree_probe` | `ref`/`path` + `props[]` / `names[]` | data handler + required binding contexts per name (no channel opened); dev only | main |
+| `team_panel_open` | `guid`, `param=team`, `team_uid` | opens a team-scoped screen with its team (`PanelManager.Open(PanelID, param, TeamReference)`; SquadScreen GUID `7957386accba7b44d81ac248d04efbac` + a youth team → `TeamSquadReport`); dev only, UI lock | main + waits |
+| `ui_texts` | `panel`, `max=500` | every visible text of an open panel at any depth `[{name, text, x, y, w, h, bind}]` (`ui_dump` stops at depth 40); dev only | main |
+| `stars_dump` / `stars_settings` | `panel`, `max` / – | star widgets of an open panel (bound vs drawn values) / the `FMStarRatingSettings` asset's youth and non-youth configurations; dev only | main |
+| `profile_info` / `profile_open` | – / `uid`, `kind=player\|nonplayer` | person-link handler's profile PanelIDs; opens a profile the way a person link does (dev only, UI lock) | main + waits |
 | `list_rows` | `panel`, `index=0`, `start=0`, `max=200` | `{panel, widgets: [{name, type, item_count, columns}], rows}`; backing data of list/table widgets (all rows, decoded) | main |
 | `nav_open` | `panel` (dev only while `~/.fm-assistant/dev-nav` exists: `guid`, or `subtab` = GUID of a visible secondary tab) | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`, `PlayerSearchReport`; `wrong-screen` if it did not open | main + waits |
 | `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
 
 | `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots, wage_structure}`; see below | main + polling |
-| `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, today, count, players: [Player]}` (`today` = `game.CurrentGameDate`, as in `training`); see below | main + polling |
+| `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, today, count, players: [Player], warnings: [str]}` (`today` = `game.CurrentGameDate`, as in `training`); see below | main + polling |
 | `staff_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Staff]}`; opens `StaffSearchReport` itself | main + polling |
-| `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
+| `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect], warnings: [str]}`; opens `PlayerSearchReport` itself | main + polling |
 | `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
 | `form` | `team=first\|reserve\|youth` | `{today, team: {uid, name, kind}, players: [Form], concerns: [uid], atmosphere: {level, text}\|null}`; see below | main + polling |
-| `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation}`; see below | main + polling |
-| `loans` | – | `{today, out: [Loan], intake: {date, days}}`; see below | main + polling |
+| `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation, report}`; see below | main + polling |
+| `loans` | – | `{today, out: [Loan], intake: {date, days}, warnings: [str]}`; see below | main + polling |
+| `inbox` | `since=null` (`YYYY-MM-DD`), `tab=all\|unread`, `max=50` (1–200) | `{today, unread, items: [Item]}`; headless, no screen; see below | main + polling |
+| `tactic` | – | `{name, mentality, slots: [Slot]}` (11 slots); first team's active tactic, headless, read-only; see below | main + polling |
+| `ctx_check` | – | `{checked: int, mismatches: [{prop, expected: [ctx], game: [ctx]}]}`; startup check of the binding-context table (`Contexts.cs`) against `Bindings.GetHandler`; no channel opened; see "Binding contexts" | main |
 
 There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
 manager cannot see (hidden attributes), so they answer only in dev mode (file `~/.fm-assistant/dev-nav` exists);
@@ -78,6 +86,31 @@ path (cancel, throw), by a cleanup job queued after any pending plant job.
 
 Client timeouts: the CLI waits each op's server timeout + 5 s. No answer by then → error code `timeout`; the
 plugin's connection limit (HTTP 503) → `busy`. Neither is reported as "game not running".
+
+### Binding contexts
+
+Some props are context-bound: their data handler (`Bindings.GetHandler`) names binding contexts that a panel
+normally provides. `Contexts.cs` holds a fixed table (prop → contexts, from `docs/discovery/2026-11-10-phase1d.md`);
+`ReadScope.ReadMany` plants the union of the contexts the requested props need as sibling nodes of the parent
+(`Reader.PlantOne(..., ctx)`), so they land headless. Values: `team` and `TeamRequestingReport` = `Human.Team`
+(always the viewer's team: star ranges and morale are masked by it), `human` = `Human` (a `PersonReference`),
+`club` = `Human.Club`, `Boolean` = `false` (true reads the same), `StringType` = `""`, `PortalMessagesTab` = the
+inbox tab (supplied by `inbox`).
+
+| source | props | contexts |
+|---|---|---|
+| person | `Morale`, `MoraleString`, `CurrentAbilityStarRange`, `PotentialAbilityStarRange` | `team`, `human` |
+| person | `CanViewHappinessInfo`, `HappinessPlayingTime`, `HappinessClub`, `HappinessManagement`, `HappinessTraining` | `human`, `team` |
+| person | `TacticsRoleName` | `team` |
+| team | `Tactic` | `Boolean` |
+| team | `HasTeamReport` | `TeamRequestingReport` |
+| human | `HumanPortalFilteredMessages` | `team`, `StringType`, `PortalMessagesTab` |
+| human | `NumberUnreadMessages` | `team` |
+
+`ctx_check` asks `GetHandler` for every row on `Human` (person/human rows) and `Human.Team` (team rows) and lists
+each prop whose context set differs (order ignored): `game` is the game's list, or `(unknown-property)` /
+`(no-handler)`. `mismatches: []` = the table matches this build. A mismatch means a context was renamed: the
+affected props would read `_missing`.
 
 ### Money
 
@@ -116,7 +149,7 @@ players read about −360…−270 on build 27.0.0.2493426, higher = more tired;
 `StartDate`, `AgreedPlayingTime` (squad status `{display, sort}` → `squad_status: {display, code}`; `display` localized,
 logic uses `code`), `MinimumFeeReleaseClauseValue` (`{display, sort}` → Money; `sort` 0 / display `"-"` = none →
 `release_clause: null`), `HasRenewalOffer` (→ `renewal_offer` bool|null).
-`Player = {uid, name, age, position_mask, attributes, condition, fatigue, injured, injury: {description,
+`Player = {uid, name, age, position_mask, attributes, stars_raw, condition, fatigue, injured, injury: {description,
 return_days}|null, contract: {wage, end_date, length_days, start_date, squad_status, release_clause, renewal_offer}}`.
 
 `AgreedPlayingTime.sort` codes seen live (build 27.0.0.2493426; English meaning inferred from the localized label and the
@@ -124,6 +157,60 @@ FM status list, not read from the game): 2 on loan (currently loaned out), 5 eme
 10 breakthrough prospect, 11 backup (goalkeeper), 13 rotation / fringe player, 19 first-team backup (impact sub),
 21 first-choice goalkeeper, 22 regular starter, 23 important player, 24 star player. Other codes (squad player, future
 prospect, cup goalkeeper, not needed, trial) exist but were not held by any player in this save.
+
+### Star ranges (stars_raw)
+
+`squad`, `player_search` and `loans` read person props `CurrentAbilityStarRange` and `PotentialAbilityStarRange`
+(context-bound, contexts `team` + `human` = the viewer: the game masks them by the manager's knowledge). Each is a
+record `{MinValue, MaxValue, IsScoutsOpinion}` on a 0–20 scale, not raw ability.
+`stars_raw = {current: {min, max}|null, potential: {min, max}|null}`.
+- −1/−1 = not scouted → null (never 0 stars).
+- A value outside 0..20 (other than −1/−1), or min > max, is dropped (null) and the result's `warnings` gets
+  `"person <uid>: <prop> <min>-<max> outside -1..20, dropped"`. `warnings` is always present (`[]` normally).
+- Own players: `current` is `n-n`; `potential` is a range for young players (e.g. 14-16, 18-20) even for own
+  players. Partly scouted others read ranges (e.g. 13-14 / 15-20); unknown players −1/−1 (672 of 689 search rows).
+- Display mapping (star widget `FMStarRatingTemp`, bindings `starrating.minvalue`/`maxvalue`): drawn half-stars =
+  value − 10, i.e. **stars = (value − 10) / 2** (10 = 0, 20 = 5 stars). Verified live on the first-team SquadScreen
+  (30 players, 42 widgets, values 13–18, ranges included) and on the U21 squad (`TeamSquadReport`, 5 youth players
+  aged 17–21, values 12–17: 12→2, 13→3, 13-15→3-5, 14-16→4-6, 15-17→5-7 half-stars): the youth view uses the same
+  mapping. `FMStarRatingSettings.YouthConfig` / `NonYouthConfig` differ only in USS style classes
+  (`…-youth-true` / `…-youth-false`), not in numbers. **Values below 10 were not seen** in this save (35 own players,
+  689 search rows, the U18 team is empty), so their display is unverified: keep them unmapped.
+- Timing: `squad` 30 players ≈ 3.1 s; `player_search` 689 rows ≈ 19.9 s; `loans` ≈ 2.2 s.
+
+### tactic
+
+Headless, read-only (no screen, nothing changed). `Human.Team.Tactic` (context `Boolean` = false) →
+`TeamTacticReference`; props `HasTactic`, `CurrentTacticSlot` (0-based; 0 seen), `TacticSlot1Name`…`TacticSlot3Name`
+(localized "mentality formation style"; null for an empty slot), `MentalityString` (localized),
+`TacticalPositionsCombined` (one record per slot: `TeamSelectionIndex` 0–10, `Player` person ref, `Position`,
+`IPPosition`, `OOPPosition`, `IPRole`, `OOPRole`, …). Per slot player: person `Name`, `TacticsRoleName` (context
+`team`; localized, the in-possession role as the screen's "IP role" column).
+`Slot = {index, position_mask, position_label, role, player: {uid, name}|null}`, exactly 11, in `TeamSelectionIndex`
+order (not the screen's top-to-bottom order). `name` = the current slot's `TacticSlot<n>Name`. A slot with no
+player: `player: null`, `role: null`; an index missing from the list: all fields null. `HasTactic` false →
+`{name: null, mentality: null, slots: []}`.
+- `position_mask` = the slot's `Position` (= `IPPosition`; `OOPPosition` can differ, e.g. AM (R) in possession,
+  M (R) out of it). It uses the **same bit scheme** as player `Position` (verified live: 11 slots of a 4-2-3-1 DM AM
+  wide), but central slots may carry a side modifier for a half-space: `0x100000` (left) / `0x200000` (right).
+  `positions.decode` renders those as `D (RC)` / `D (LC)` / `DM (R)` / `DM (L)`, while the tactics screen labels them
+  `D (C)` / `DM`. So use `position_label`, not `decode(position_mask)`.
+- `position_label`: the screen's slot label, from the mask with the modifiers removed:
+
+  | bit | label | bit | label |
+  |---|---|---|---|
+  | 1 | GK | 512 | M (L) |
+  | 4 | D (R) | 1024 | M (C) |
+  | 8 | D (L) | 2048 | AM (R) |
+  | 16 (+0x100000/0x200000) | D (C) | 4096 | AM (L) |
+  | 32 | WB (R) | 8192 | AM (C) |
+  | 64 | WB (L) | 16384, 32768, 65536 | ST (C) |
+  | 128 (+0x100000/0x200000) | DM | | |
+  | 256 | M (R) | | |
+
+  Every label is one of `fm_assistant.positions.SLOTS`; a mask with none or several of these bits → null. Live check
+  (tactics screen `TacticalPlannerTool`, column `StartingXI`): all 11 labels equal the screen's, including the four
+  half-space slots (two `D (C)`, two `DM`). Timing ≈ 1.7 s round trip.
 
 ### staff_search
 
@@ -150,7 +237,7 @@ Knowledge: headless attribute reads already apply the game's masking — `"-"` (
 not the table's knowledge column (whose source is not identified; it read "none" for players whose value
 knowledge was "known").
 `Prospect = {uid, name, age, position_mask, club_uid, value, asking_price, wage, contract_end, value_knowledge,
-scout_rating, attributes}`.
+scout_rating, stars_raw, attributes}`.
 
 ### form
 
@@ -162,7 +249,9 @@ Competition names: the record's `Competition` value is planted directly (`Reader
 `Name`; a `NullReference` competition (friendlies) is `competition: null`. Team props: `HappinessIssuesPlayers` (person
 refs → `concerns`), `ClubAtmosphereFeedback` (`CurrentDynamicSupportLevel` → `atmosphere.level`,
 `CurrentDynamicSupportStringShort` (localized) → `atmosphere.text`).
-`Form = {uid, name, season: [{competition, apps, starts, subs, rating}], last5: {rating, valid, minutes: [int|null]}}`.
+`Form = {uid, name, season: [{competition, apps, starts, subs, rating}], last5: {rating, valid, minutes: [int|null]},
+morale: {value, text}|null, happiness: {playing_time, club, management, training}|null}`, each area
+`{severity, change, text}|null`.
 - `season[].rating` = `AverageRating`, null when `AppearancesForRating` is 0 (never a 0.0 rating).
 - `last5.valid` = `LastFiveMatchesListHasValidFixtures` and a non-empty list; `last5.rating` is null when not valid.
 - `last5.minutes`, one per listed match (most recent first, as the game lists them): sub on/off 0/0 = 90; a sub-off
@@ -170,6 +259,27 @@ refs → `concerns`), `ClubAtmosphereFeedback` (`CurrentDynamicSupportLevel` →
   Extra time is not counted. There is no season-minutes prop.
 - Early season / friendlies only: competitive counters are 0 and `Competition` is null; ratings come from the
   friendlies' records (competition null).
+- Morale and happiness (context-bound, contexts `team` + `human` = the viewer): person props `CanViewHappinessInfo`,
+  `Morale` (int → `morale.value`), `MoraleString` (localized → `morale.text`), `HappinessPlayingTime`,
+  `HappinessClub`, `HappinessManagement`, `HappinessTraining` (records `{Severity, Description, HappinessRecentChange,
+  ProsList, ConsList, DetailedString?}` → `{severity, change, text}`; `text` = `Description` with tags removed,
+  localized, embeds the player's name). Both `morale` and `happiness` are null unless `CanViewHappinessInfo` is
+  `"True"` (other clubs' players read made-up negative `Morale` numbers). `morale` is null when `Morale` did not
+  land (never 0); an area that did not land is null.
+- Values seen live (build 27.0.0.2493426, first team 30 + reserve 5 players, one game date; youth team empty):
+  - `Morale` 9–14: 9 "Cukup Oke", 10 "Oke", 11 "Lumayan Bagus", 12 "Cukup Bagus", 13 "Bagus", 14 "Sangat Bagus"
+    (okay → very good; no low morale in this save).
+  - `playing_time`, `club`, `management` share one small scale where **lower = happier**: −5 "senang sekali"
+    (delighted), −4 "sangat senang" (very happy), −3 "senang" (happy), 0 "puas" (content). Positive values were not
+    seen; by the direction of the scale the text turns negative above 0 (inferred, not observed).
+  - `training` uses a different, wider scale where **higher = happier**: −32 and −26 "Khawatir" (worried, the only
+    negative text seen), −20 … 25 "Puas" (content), 49 "Senang" (happy), 52 "Sangat Bahagia" (very happy); its text
+    is a short label (no name). The text turns negative between −20 and −26. −111 with text `"-"` = no training
+    data (two reserve players).
+  - So no single "severity above X" threshold works for all four areas: per area, unhappy = `severity > 0` for
+    playing_time/club/management, `severity < -20` for training (worried seen at −26 and −32, content at −20; fm uses −20 so the unknown −25…−21 band errs toward flagging), and −111 =
+    unknown.
+  - `change` (`HappinessRecentChange`): −1, 0, 1 seen.
 
 ### fixtures
 
@@ -187,7 +297,23 @@ the comp value once per comp uid). Opponent names: team `Name`; `opponent_format
 - `upcoming`: the next fixtures, date ascending, `date` ≥ `today`, deduplicated by (date, opponent), at most `n`;
   `upcoming[0]` equals `next` when both exist. Beyond the fifth fixture only league fixtures are known (cup ties after
   the fifth are missing).
-- No next fixture: `next: null`, `threat: null`, `opponent_formation: null`.
+- No next fixture: `next: null`, `threat: null`, `opponent_formation: null`, `report: null`.
+- `report`: the next opponent's `HasTeamReport` (context `TeamRequestingReport` = `Human.Team`) → bool: true when
+  the recruitment team has an opposition report on that team. Reading it does not request a report.
+
+### inbox
+
+Headless (no screen opened). `Human.HumanPortalFilteredMessages` with contexts `team`, `StringType` = `""`,
+`PortalMessagesTab` = `0` (`tab=all`) or `3` (`tab=unread`) → `NewsItemReference` values, newest first (the
+portal's window, about three weeks); `Human.NumberUnreadMessages` (context `team`) → `unread`. The first `max`
+elements are planted directly (no context) for `NewsItemId`, `Date`, `NewsItemTimeSent`, `NewsItemHasBeenRead`,
+`NewsItemIsImportant`, `MediaNewsCategory`, `NewsTitleString`, `NewsBodyString`.
+`Item = {id, date, time, read, important, category, title, body}`.
+- `id` is not monotonic (do not order by it); `category` = `MediaNewsCategory` (int, language-neutral; 0, 1, 2 seen).
+- `title`/`body`: localized, markup tags removed; `body` is cut to 600 characters.
+- `since`: items stop at the first one whose `date` is before `since` (the list is date-descending). A `since` after
+  every item, or an empty tab, gives `items: []` with `unread` still set.
+- Reading does not mark anything read. Timing: 75 items ≈ 1.6 s round trip.
 
 ### loans
 
@@ -196,7 +322,8 @@ Club props (`Human.Club`): `PlayersOutOnLoan` (person refs; required), `IntakeDa
 `LoanClub` (club ref → `club: {uid, name}`, name = club `Name`), `LoanContract` → `StartDate`, `EndDate`,
 `LoanAppearances` → `apps`, `LoanAverageRating` → `rating` (null when `apps` is 0, never 0.0), `LoanHappiness` (int),
 `LoanReport` → `AgreedPlayingTime` / `ActualPlayingTime` (localized strings, display only; `"-"` or empty → null).
-`Loan = {uid, name, age, club: {uid, name}, start_date, end_date, apps, rating, happiness, agreed_time, actual_time}`.
+`Loan = {uid, name, age, club: {uid, name}, start_date, end_date, apps, rating, happiness, agreed_time, actual_time,
+stars_raw}`.
 `LoanClub` is not a test for "out on loan" (it reads the own club for players at home); the list is the source.
 Loanees also stay in their team's `Players` (seen in the reserve team, squad status code 2).
 
@@ -241,6 +368,20 @@ Never by visible text (the owner's UI is Indonesian):
   frames crashes in libunwind (Phase 0 "startup crash" signature).
 - Tick sources: `UIElementsRuntimeUtility.RepaintPanels`, `PanelManager.Tick`, `Bindings.Update` prefixes, main
   thread only (one launch got no RepaintPanels prefix calls at all).
+
+## Discovery notes (phase 1d)
+
+- Never run il2cpp reflection `FieldInfo.GetValue` over a UI element's fields (tried on an `FMStarRatingTemp`
+  widget): the game died (native crash). `stars_settings` reads only the `FMStarRatingSettings` ScriptableObject.
+
+Details: `docs/discovery/2026-11-10-phase1d.md`.
+- "Context-bound" props need named binding contexts (`Bindings.GetHandler`'s `outRequiredContext`, e.g. `team` +
+  `human` for `Morale` and star ranges). `Reader.PlantOne(..., ctx)` plants them as sibling nodes of the parent;
+  they then land headless in ~1.2 s.
+- Inbox: `Human.HumanPortalFilteredMessages` with contexts `team`, `StringType`, `PortalMessagesTab` (0 all,
+  1 new, 2 tasks, 3 unread), no screen needed.
+- Profiles: `PanelManager.Open(profile PanelID, "player"|"person", PersonReference)`; `Estimated*` wage demands
+  have no handler outside the negotiation flow.
 
 ## Discovery notes (phase 1c)
 

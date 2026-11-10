@@ -18,8 +18,8 @@ internal sealed class Plant
 {
     public string Error;
     public FM.GamePlugin.GameInteropSubsystem Interop;
-    public Bindings.Key ParentKey;
-    public bool HasParent;
+    public Bindings.Key ParentKey, WrapperKey;
+    public bool HasParent, HasWrapper;
     public readonly List<Prop> Props = new List<Prop>();
     public Prop this[string name] => Props.Find(p => p.Name == name);
 }
@@ -44,15 +44,18 @@ internal sealed class ReadScope : IAsyncDisposable
     private readonly CancellationToken _ct;
     public ReadScope(CancellationToken ct) { _ct = ct; }
 
-    public async Task<List<Plant>> ReadMany(List<Func<TypedValue>> parents, string[] props, int waitMs = 4000)
+    public async Task<List<Plant>> ReadMany(List<Func<TypedValue>> parents, string[] props, int waitMs = 4000,
+        Func<Dictionary<string, TypedValue>> ctx = null)
     {
+        ctx ??= Contexts.Values(props);   // context-bound props (Contexts table) get the viewer's contexts
         var plants = await Reader.MainR(() =>
         {
             if (!Native.Resolve(out var problem)) return R<List<Plant>>.Err("binding-api-changed", problem);
             var l = new List<Plant>();
             try
             {
-                foreach (var p in parents) l.Add(Reader.PlantOne(p(), props, _owned));
+                var c = ctx?.Invoke();
+                foreach (var p in parents) l.Add(Reader.PlantOne(p(), props, _owned, c));
             }
             catch (Exception e)  // never e.ToString() on the main thread
             {
@@ -70,8 +73,9 @@ internal sealed class ReadScope : IAsyncDisposable
         return plants;
     }
 
-    public async Task<Plant> ReadOne(Func<TypedValue> parent, string[] props, int waitMs = 4000) =>
-        (await ReadMany(new List<Func<TypedValue>> { parent }, props, waitMs))[0];
+    public async Task<Plant> ReadOne(Func<TypedValue> parent, string[] props, int waitMs = 4000,
+        Func<Dictionary<string, TypedValue>> ctx = null) =>
+        (await ReadMany(new List<Func<TypedValue>> { parent }, props, waitMs, ctx))[0];
 
     public Task<List<JsonObject>> Collect(List<Plant> plants) =>
         Reader.Main(() => plants.ConvertAll(Reader.Collect), _ct);
@@ -155,6 +159,23 @@ internal static class Reader
         return res;
     }
 
+    /// Main thread. The elements of a list value (TypedValues), at most max. Indexer only.
+    public static List<TypedValue> ListElems(TypedValue list, int max = 200)
+    {
+        var res = new List<TypedValue>();
+        Il2CppSystem.Collections.IList l = null;
+        try { l = list?.Get()?.TryCast<Il2CppSystem.Collections.IList>(); } catch { }
+        if (l == null) return res;
+        var n = Math.Min(l.Cast<Il2CppSystem.Collections.ICollection>().Count, max);
+        for (var i = 0; i < n; i++)
+        {
+            TypedValue v = null;
+            try { v = l[i]?.TryCast<TypedValue>(); } catch { }
+            if (v != null) res.Add(v);
+        }
+        return res;
+    }
+
     /// Main thread. True for a missing value or the game's NullReference placeholder (e.g. a friendly's competition).
     public static bool IsNullRef(TypedValue v)
     {
@@ -164,7 +185,11 @@ internal static class Reader
 
     // ------------------------------------------------------------ main thread
 
-    internal static Plant PlantOne(TypedValue parent, string[] props, List<Plant> owner = null)
+    /// ctx: binding contexts some properties require (Bindings.GetHandler's outRequiredContext, e.g. "team", "human"
+    /// for Morale). They are planted as sibling nodes of the parent (`__fm_N.<ctx>`, parent at `__fm_N.subj`); the
+    /// binding system finds a context by walking up from the property node, as it does for a panel's variables.
+    internal static Plant PlantOne(TypedValue parent, string[] props, List<Plant> owner = null,
+        Dictionary<string, TypedValue> ctx = null)
     {
         var b = Plugin.Bindings;
         var plant = new Plant();
@@ -173,9 +198,28 @@ internal static class Reader
         { plant.Error = "game-interop-subsystem-not-found"; return plant; }
 
         // Flat name at the root (no dotted path) so Remove leaves no intermediate node behind.
-        plant.ParentKey = Native.CreatePath(b, "__fm_" + Interlocked.Increment(ref _counter), Bindings.NodeFlags.Default);
-        plant.HasParent = true;
-        owner?.Add(plant);   // registered before any Bind, so a throw below still gets it closed
+        var root = "__fm_" + Interlocked.Increment(ref _counter);
+        if (ctx != null && ctx.Count > 0)
+        {
+            plant.WrapperKey = Native.CreatePath(b, root, Bindings.NodeFlags.None);
+            plant.HasWrapper = true;
+            owner?.Add(plant);
+            foreach (var kv in ctx)
+            {
+                if (kv.Value == null) continue;
+                var k = Native.CreateRooted(b, plant.WrapperKey, kv.Key, Bindings.NodeFlags.None);
+                b.Set(ref k, kv.Value, Bindings.SetFlags.ForceUpdateValue);
+            }
+            plant.ParentKey = Native.CreateRooted(b, plant.WrapperKey, "subj", Bindings.NodeFlags.Default);
+            plant.HasParent = true;
+        }
+        else
+        {
+            // Flat name at the root (no dotted path) so Remove leaves no intermediate node behind.
+            plant.ParentKey = Native.CreatePath(b, root, Bindings.NodeFlags.Default);
+            plant.HasParent = true;
+            owner?.Add(plant);   // registered before any Bind, so a throw below still gets it closed
+        }
         foreach (var name in props)
         {
             var prop = new Prop { Name = name };
@@ -235,6 +279,11 @@ internal static class Reader
         {
             try { b.Remove(ref plant.ParentKey); } catch (Exception e) { Plugin.L.LogWarning($"remove parent: {e.Message}"); }
             plant.HasParent = false;
+        }
+        if (plant.HasWrapper)
+        {
+            try { b.Remove(ref plant.WrapperKey); } catch (Exception e) { Plugin.L.LogWarning($"remove wrapper: {e.Message}"); }
+            plant.HasWrapper = false;
         }
     }
 

@@ -11,6 +11,11 @@ from . import contracts as contracts_mod
 from . import depth as depth_mod
 from . import briefing as briefing_mod
 from . import fixtures as fixtures_mod
+from . import stars as stars_mod
+from . import rolefit as rolefit_mod
+from . import trends as trends_mod
+from . import rotation as rotation_mod
+from . import inbox as inbox_mod
 from . import form as form_mod
 from . import loans as loans_mod
 from . import vacancies as vacancies_mod
@@ -169,6 +174,14 @@ def table(rows: list[list], header: list[str]) -> str:
     return "\n".join("  ".join(c.ljust(w[i]) for i, c in enumerate(r)).rstrip() for r in rows)
 
 
+def star_cols(p: dict) -> list[str]:
+    return [stars_mod.fmt(p["stars"]["current"]), stars_mod.fmt(p["stars"]["potential"])]
+
+
+def warn_line(res: dict) -> str:
+    return "\nwarnings: " + "; ".join(map(str, res["warnings"])) if res.get("warnings") else ""
+
+
 def shown(res: dict) -> str:
     return f"{res['returned']} of {res['count']} shown" if res.get("truncated") else f"{res['returned']} shown"
 
@@ -178,8 +191,9 @@ def slots_text(slots: dict) -> str:
 
 
 @main.command("briefing")
+@click.option("--no-snapshot", is_flag=True, help="Do not save today's trend snapshot.")
 @click.pass_obj
-def briefing_cmd(st):
+def briefing_cmd(st, no_snapshot):
     """Session briefing: next match, injuries, tired, contracts, concerns, form, vacancies, loans (no slow searches)."""
     need_hello(st)
     c = FmClient()
@@ -190,8 +204,60 @@ def briefing_cmd(st):
             parts[op] = c.call(op, **args)
         except FmError as e:  # one failed part never hides the others; FmUnavailable still stops the command
             parts[op] = {"error": e.code}
+    today = (parts.get("squad") or {}).get("today") or (parts.get("fixtures") or {}).get("today")
+    since = (date.fromisoformat(today) - timedelta(days=1)).isoformat() if today else None
+    try:
+        parts["inbox"] = c.call("inbox", since=since, tab="all", max=20)
+    except FmError as e:
+        parts["inbox"] = {"error": e.code}
     b = briefing_mod.build(parts)
+    if not no_snapshot and all(isinstance(parts.get(k), dict) and "error" not in parts[k] for k in ("club", "squad", "form")):
+        try:
+            trends_mod.save(trends_mod.snapshot(parts["club"], parts["squad"], parts["form"]))
+        except (OSError, KeyError, TypeError, ValueError):  # a snapshot problem never hides the briefing
+            click.echo("warning: could not save the trend snapshot", err=True)
     emit(st, b, briefing_mod.text(b))
+
+
+@main.command("inbox")
+@click.option("--since", help="Only messages on or after this date (YYYY-MM-DD).")
+@click.option("--unread", is_flag=True, help="Unread messages only.")
+@click.option("--max", "max_", type=click.IntRange(1, 200), default=20, show_default=True)
+@click.pass_obj
+def inbox_cmd(st, since, unread, max_):
+    """Inbox messages, newest first ('*' unread, '!' important)."""
+    need_hello(st)
+    res = FmClient().call("inbox", since=since, tab="unread" if unread else "all", max=max_)
+    emit(st, res, inbox_mod.text(res, since))
+
+
+def _snapshot() -> dict:
+    c = FmClient()
+    return trends_mod.snapshot(c.call("club"), c.call("squad", team="first"), c.call("form", team="first"))
+
+
+@main.command("snapshot")
+@click.pass_obj
+def snapshot_cmd(st):
+    """Save today's club and squad state for trends (kept in ~/.fm-assistant/snapshots, not in the repo)."""
+    need_hello(st)
+    snap = _snapshot()
+    path = trends_mod.save(snap)
+    emit(st, {"path": str(path), "date": snap["date"], "players": len(snap["players"])}, f"saved {path}")
+
+
+@main.command("trends")
+@click.pass_obj
+def trends_cmd(st):
+    """Save today's snapshot, then compare with the latest earlier one of this club."""
+    need_hello(st)
+    snap = _snapshot()
+    later = trends_mod.later_snapshot(snap["club_uid"], snap["date"])
+    prev = None if later else trends_mod.load_previous(snap["club_uid"], snap["date"])   # read before saving
+    path = trends_mod.save(snap)
+    d = trends_mod.diff(prev, snap) if prev else None
+    emit(st, {"saved": str(path), "date": snap["date"], "previous": prev and prev["date"], "diff": d,
+              "later_snapshot": later}, trends_mod.text(snap, prev, d, later))
 
 
 @main.group()
@@ -223,8 +289,9 @@ def squad():
 def squad_list(st, team):
     need_hello(st)
     s = squad_mod.normalize(FmClient().call("squad", team=team))
-    emit(st, s, table([[p["name"], p.get("age"), p["position"], p.get("condition"), p.get("injured")]
-                       for p in s["players"]], ["name", "age", "position", "condition", "injured"]))
+    emit(st, s, table([[p["name"], p.get("age"), p["position"], p.get("condition"), p.get("injured"),
+                        *star_cols(p)] for p in s["players"]],
+                      ["name", "age", "position", "condition", "injured", "ability", "potential"]) + warn_line(s))
 
 
 @squad.command("watch")
@@ -290,10 +357,12 @@ def squad_form(st, team):
         return ", ".join(r["name"] for r in fl[key]) or "none"
 
     text = (table([[r["name"], r["apps"], rate(r["rating"]), rate(r["last5_rating"], "-"), r["last5_minutes"],
-                    "yes" if r["concern"] else ""] for r in rows],
-                  ["name", "apps", "rating", "last 5", "last 5 min", "concern"])
+                    "-" if r["morale"] is None else f"{r['morale']} {r['morale_text'] or ''}".strip(),
+                    ", ".join(r["unhappy"]), "yes" if r["concern"] else ""] for r in rows],
+                  ["name", "apps", "rating", "last 5", "last 5 min", "morale", "unhappy with", "concern"])
             + f"\n\nLow form (last 5 under {form_mod.LOW_FORM}): {names('low_form')}"
             + f"\nUnused (no appearances): {names('unused')}"
+            + f"\nUnhappy: {names('unhappy')}"
             + f"\nConcerns: {names('concerns')}"
             + f"\nClub atmosphere: {(f.get('atmosphere') or {}).get('text') or '?'}")
     emit(st, {"today": f["today"], "team": f["team"], "players": rows, "flags": fl,
@@ -311,14 +380,30 @@ def squad_loans(st):
         head = "Out on loan\n" + table(
             [[l["name"], l.get("age"), l["club"]["name"], l.get("start_date"), l.get("end_date"), l["apps"],
               "no matches yet" if l["rating"] is None else f"{l['rating']:.2f}", l.get("agreed_time"),
-              l.get("actual_time")] for l in res["out"]],
-            ["name", "age", "club", "from", "to", "apps", "rating", "agreed time", "actual time"])
+              l.get("actual_time"), *star_cols(l)] for l in res["out"]],
+            ["name", "age", "club", "from", "to", "apps", "rating", "agreed time", "actual time", "ability", "potential"])
     else:
         head = "Out on loan: none"
     text = (head + "\n" + loans_mod.intake_line(res.get("intake"))
             + (f"\nFlagged (no appearances {loans_mod.UNUSED_AFTER_DAYS}+ days into the loan): "
-               + ", ".join(l["name"] for l in flagged) if flagged else ""))
+               + ", ".join(l["name"] for l in flagged) if flagged else "") + warn_line(res))
     emit(st, {**res, "flagged": flagged}, text)
+
+
+@squad.command("rotation")
+@click.option("--days", type=click.IntRange(1, 30), default=7, show_default=True, help="Window in days.")
+@click.pass_obj
+def squad_rotation(st, days):
+    """Options for tired or injured XI players when 2+ matches fall in the window (facts, no instructions)."""
+    need_hello(st)
+    c = FmClient()
+    tactic = c.call("tactic")
+    sq = c.call("squad", team="first")
+    fx = c.call("fixtures", n=10)
+    fo = form_mod.summary(c.call("form", team="first"))
+    rows = rolefit_mod.check(tactic, sq)
+    h = rotation_mod.hints(rows, sq["players"], fx.get("upcoming") or [], date.fromisoformat(fx["today"]), fo, days)
+    emit(st, {**h, "window_days": days}, rotation_mod.text(h, days))
 
 
 def _depth_for(team: str = "first") -> dict:
@@ -358,6 +443,17 @@ def fixtures(st, n):
 
     out = {**res, "next": with_days(res.get("next")), "upcoming": [with_days(f) for f in res.get("upcoming") or []]}
     emit(st, out, fixtures_mod.text(res))
+
+
+@main.command("tactic")
+@click.pass_obj
+def tactic_cmd(st):
+    """The active tactic: slots, roles and who plays them, with position fit and condition facts (no advice)."""
+    need_hello(st)
+    c = FmClient()
+    t = c.call("tactic")
+    rows = rolefit_mod.check(t, c.call("squad", team="first"))
+    emit(st, {**t, "fit": rows}, rolefit_mod.text(t, rows, table))
 
 
 @main.group()
@@ -442,9 +538,9 @@ def players_search(st, max_, affordable):
         club_ = c.call("club")
         res["rows"] = players_mod.affordable(res["rows"], club_["transfer_budget"]["value"], budget.wage_headroom(club_))
     emit(st, res, table([[p["name"], p.get("age"), p["position"], budget.fmt(p.get("asking_price") or p.get("value")),
-                          budget.fmt(p.get("wage")), p.get("scout_rating")] for p in res["rows"]],
-                        ["name", "age", "position", "price", "wage", "scout"])
-         + f"\n{shown(res)}" + (f", {len(res['rows'])} affordable" if affordable else ""))
+                          budget.fmt(p.get("wage")), p.get("scout_rating"), *star_cols(p)] for p in res["rows"]],
+                        ["name", "age", "position", "price", "wage", "scout", "ability", "potential"])
+         + f"\n{shown(res)}" + (f", {len(res['rows'])} affordable" if affordable else "") + warn_line(res))
 
 
 @players.command("targets")
@@ -469,8 +565,8 @@ def players_targets(st, top, max_):
     for s in thin:
         parts.append(f"\n{s['slot']} (fit {s['fit']}/{s['min']})")
         parts.append(table([[p["name"], p.get("age"), p["position"], budget.fmt(p.get("asking_price") or p.get("value")),
-                             budget.fmt(p.get("wage")), p.get("scout_rating"), "budget?" if p["budget_unknown"] else ""]
-                            for p in picked[s["slot"]]], ["name", "age", "position", "price", "wage", "scout", ""])
+                             budget.fmt(p.get("wage")), p.get("scout_rating"), *star_cols(p), "budget?" if p["budget_unknown"] else ""]
+                            for p in picked[s["slot"]]], ["name", "age", "position", "price", "wage", "scout", "ability", "potential", ""])
                      if picked[s["slot"]] else "no affordable candidates")
     parts.append(f"\n{shown(found)}, {len(rows)} affordable")
     emit(st, out, "\n".join(parts))

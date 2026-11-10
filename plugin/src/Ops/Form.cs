@@ -13,7 +13,11 @@ namespace FmAssistant;
 internal static class Form
 {
     private const int Batch = 10, MaxPlayers = 80, FullMatch = 90;
-    private static readonly string[] PlayerProps = { "Name", "SeasonStatsList", "LastFiveClubMatchesForm" };
+    private static readonly (string Key, string Prop)[] Areas =
+        { ("playing_time", "HappinessPlayingTime"), ("club", "HappinessClub"), ("management", "HappinessManagement"), ("training", "HappinessTraining") };
+    // Morale / Happiness* / CanViewHappinessInfo are context-bound (team, human): planted with Contexts.
+    private static readonly string[] PlayerProps = new[] { "Name", "SeasonStatsList", "LastFiveClubMatchesForm", "CanViewHappinessInfo", "Morale", "MoraleString" }
+        .Concat(Areas.Select(x => x.Prop)).ToArray();
     private static readonly string[] TeamProps = { "Name", "Players", "HappinessIssuesPlayers", "ClubAtmosphereFeedback" };
 
     /// {"team": "first"|"reserve"|"youth"} -> {today, team, players: [Form], concerns: [uid], atmosphere: {level, text}|null}
@@ -91,6 +95,8 @@ internal static class Form
 
     private static JsonObject Player(int uid, JsonObject p, Dictionary<int, string> comps)
     {
+        // Morale reads numbers for players the manager cannot view (other clubs): gate on CanViewHappinessInfo.
+        var visible = Squad.Bool(p["CanViewHappinessInfo"]) == true;
         var season = new JsonArray();
         foreach (var r in p["SeasonStatsList"] as JsonArray ?? new JsonArray())
         {
@@ -112,7 +118,20 @@ internal static class Form
             ["name"] = p["Name"].Copy(),
             ["season"] = season,
             ["last5"] = Last5(p["LastFiveClubMatchesForm"] as JsonObject),
+            ["morale"] = visible && p["Morale"].Int() is int m ? new JsonObject { ["value"] = m, ["text"] = Text.Plain(p["MoraleString"]) } : null,
+            ["happiness"] = visible ? Happiness(p) : null,
         };
+    }
+
+    /// One record per area ({Severity, Description, HappinessRecentChange, …}); an area that did not land is null.
+    private static JsonObject Happiness(JsonObject p)
+    {
+        var o = new JsonObject();
+        foreach (var (key, prop) in Areas)
+            o[key] = p[prop] is JsonObject r && r["Severity"].Int() is int sev
+                ? new JsonObject { ["severity"] = sev, ["change"] = r["HappinessRecentChange"].Int(), ["text"] = Text.Plain(r["Description"]) }
+                : null;
+        return o;
     }
 
     private static JsonObject Last5(JsonObject f)

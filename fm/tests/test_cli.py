@@ -180,7 +180,7 @@ def test_training_load(monkeypatch):
 
 
 def test_doctor_features_listed():
-    assert [op for _, op, _ in doctor.FEATURES] == ["club", "squad", "staff_search", "player_search", "training"]
+    assert [op for _, op, _ in doctor.FEATURES] == ["club", "squad", "staff_search", "player_search", "training", "ctx_check"]
 
 
 def test_malformed_game_data_is_one_line_not_traceback(monkeypatch):
