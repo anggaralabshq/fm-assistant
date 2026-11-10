@@ -135,6 +135,39 @@ internal static class Spike
         }, ct);
     }
 
+    /// Main thread. Fields of an il2cpp object (il2cpp reflection), values as text, nested objects one level deep.
+    /// ScriptableObject settings only: run over a VisualElement (FMStarRatingTemp) it crashed the game (native).
+    private static JsonObject Fields(Il2CppSystem.Object o, int depth)
+    {
+        var r = new JsonObject();
+        if (o == null) return r;
+        Il2CppSystem.Type t = null;
+        try { t = o.GetIl2CppType(); r["$type"] = t.FullName; } catch { return r; }
+        var flags = Il2CppSystem.Reflection.BindingFlags.Instance | Il2CppSystem.Reflection.BindingFlags.Public | Il2CppSystem.Reflection.BindingFlags.NonPublic;
+        foreach (var f in t.GetFields(flags))
+        {
+            try
+            {
+                var v = f.GetValue(o);
+                string ft = f.FieldType.FullName ?? "";
+                if (v == null) r[f.Name] = null;
+                else if (depth > 0 && !f.FieldType.IsPrimitive && !f.FieldType.IsEnum && ft != "System.String") r[f.Name] = Fields(v, depth - 1);
+                else r[f.Name] = v.ToString();
+            }
+            catch (Exception e) { r[f.Name] = $"<{e.GetType().Name}>"; }
+        }
+        return r;
+    }
+
+    /// {} -> every loaded FMStarRatingSettings asset: its youth / non-youth configuration fields (dev, read-only).
+    public static Task<JsonNode> StarsSettings(JsonObject a, CancellationToken ct) => Reader.MainR<JsonNode>(() =>
+    {
+        var arr = new JsonArray();
+        foreach (var o in UnityEngine.Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.Of<FM.UI.FMStarRatingSettings>()))
+            arr.Add(Fields(o.Cast<Il2CppSystem.Object>(), 2));
+        return arr;
+    }, ct);
+
     private static FM.UI.EmbeddedDataHandler.PersonReferenceClickedHandler PersonClick()
     {
         foreach (var o in UnityEngine.Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.Of<FM.UI.EmbeddedDataHandler>()))
@@ -197,6 +230,34 @@ internal static class Spike
             if (after != before) { await Task.Delay(750, ct); after = await Reader.Main(Ui.OpenIds, ct); break; }
         }
         return new JsonObject { ["before"] = before, ["after"] = after, ["ms"] = Environment.TickCount64 - t0 };
+    }
+
+    /// {"guid": PanelID GUID, "param": "team", "team_uid": n} -> opens a team-scoped screen (e.g. a youth squad's
+    /// SquadScreen) the way a navigation entry with an object does: PanelManager.Open(PanelID, param, TeamReference).
+    /// A view only. Dev mode, UI lock, normal game screens only.
+    public static async Task<JsonNode> TeamPanelOpen(JsonObject a, CancellationToken ct)
+    {
+        var guid = Meta.Str(a, "guid", required: true);
+        var param = Meta.Str(a, "param") ?? "team";
+        var uid = Meta.Int(a, "team_uid", 0, 1);
+        if (guid.Length != 32) throw new OpException("bad-request", "guid must be 32 hex chars");
+        await Reader.MainR(Nav.OnGameScreens, ct);
+        var before = await Reader.Main(Ui.OpenIds, ct);
+        await Reader.MainR<bool>(() =>
+        {
+            ManualSingleton<PanelManager>.Instance.Open(new UnityEngine.AddressableAssets.AssetReferenceT<PanelID>(guid), param,
+                Reader.TeamRef(uid), null, null, RebindMethod.None);
+            return true;
+        }, ct);
+        string after = before;
+        var end = Environment.TickCount64 + 8000;
+        while (Environment.TickCount64 < end)
+        {
+            await Task.Delay(250, ct);
+            after = await Reader.Main(Ui.OpenIds, ct);
+            if (after != before) { await Task.Delay(1500, ct); after = await Reader.Main(Ui.OpenIds, ct); break; }
+        }
+        return new JsonObject { ["before"] = before, ["after"] = after };
     }
 
     /// {"path": "" (root), "names": [...], "max_nodes": 200000} -> nodes (by value type, first path seen) where any

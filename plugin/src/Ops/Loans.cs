@@ -14,10 +14,10 @@ internal static class Loans
     private const int Batch = 10, MaxLoans = 80;
     private static readonly string[] ClubProps = { "PlayersOutOnLoan", "IntakeDate", "DaysUntilYouthIntake" };
     private static readonly string[] PlayerProps =
-        { "Name", "Age", "LoanClub", "LoanContract", "LoanAppearances", "LoanAverageRating", "LoanHappiness", "LoanReport" };
+        { "Name", "Age", "LoanClub", "LoanContract", "LoanAppearances", "LoanAverageRating", "LoanHappiness", "LoanReport", "CurrentAbilityStarRange", "PotentialAbilityStarRange" };
     private static readonly string[] ContractProps = { "StartDate", "EndDate" };
 
-    /// {} -> {today, out: [Loan], intake: {date, days}}
+    /// {} -> {today, out: [Loan], intake: {date, days}, warnings}
     public static async Task<JsonNode> Read(JsonObject a, CancellationToken ct)
     {
         var clubUid = await Club.HumanUid(ct);
@@ -55,6 +55,7 @@ internal static class Loans
         }
 
         var outList = new JsonArray();
+        var warnings = new JsonArray();
         foreach (var (uid, p, c) in rows)
         {
             var apps = p["LoanAppearances"].Int();
@@ -72,6 +73,7 @@ internal static class Loans
                 ["happiness"] = p["LoanHappiness"].Int(),
                 ["agreed_time"] = Text(report?["AgreedPlayingTime"]),
                 ["actual_time"] = Text(report?["ActualPlayingTime"]),
+                ["stars_raw"] = Squad.StarsRaw(uid, p, warnings),
             });
         }
         return new JsonObject
@@ -79,6 +81,7 @@ internal static class Loans
             ["today"] = today,
             ["out"] = outList,
             ["intake"] = new JsonObject { ["date"] = club["IntakeDate"].Copy(), ["days"] = club["DaysUntilYouthIntake"].Int() },
+            ["warnings"] = warnings,
         };
     }
 

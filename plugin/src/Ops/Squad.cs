@@ -27,8 +27,12 @@ internal static class Squad
         "AerialReach", "CommandOfArea", "Communication", "Eccentricity", "Handling", "Kicking", "OneOnOnes", "Reflexes",
         "RushingOut", "TendencyToPunch", "Throwing",
     };
+    // Declared before PlayerProps (static initializers run in text order).
+    /// Scouted star ranges (context-bound: team + human = the viewer, so the game masks them by the manager's knowledge).
+    public static readonly string[] StarProps = { "CurrentAbilityStarRange", "PotentialAbilityStarRange" };
+
     private static readonly string[] PlayerProps = new[] { "Name", "Age", "Position", "Condition", "Fatigue", "IsInjured", "CurrentInjury", "FullContract" }
-        .Concat(Attributes.Select(a => "Attribute" + a)).ToArray();
+        .Concat(StarProps).Concat(Attributes.Select(a => "Attribute" + a)).ToArray();
     private static readonly string[] ContractProps = { "Wage", "EndDate", "ContractLength", "StartDate", "AgreedPlayingTime", "MinimumFeeReleaseClauseValue", "HasRenewalOffer" };
 
     /// {"team": "first"|"reserve"|"youth"} -> {club, team, today, count, players: [Player]} (docs/protocol.md "squad").
@@ -52,6 +56,7 @@ internal static class Squad
                 .Where(r => (string)r["$ref"] == "Person").Select(r => (int)r["uid"]).Take(MaxPlayers).ToList();
         }
         var players = new JsonArray();
+        var warnings = new JsonArray();
         for (var i = 0; i < uids.Count; i += Batch)
         {
             var chunk = uids.Skip(i).Take(Batch).ToList();
@@ -61,7 +66,7 @@ internal static class Squad
             var cPlants = await scope.ReadMany(contracts.Select(v => (Func<TypedValue>)(() => v)).ToList(), ContractProps);
             var rows = await scope.Collect(plants);
             var cRows = await scope.Collect(cPlants);
-            for (var j = 0; j < chunk.Count; j++) players.Add(Player(chunk[j], rows[j], cRows[j]));
+            for (var j = 0; j < chunk.Count; j++) players.Add(Player(chunk[j], rows[j], cRows[j], warnings));
         }
         return new JsonObject
         {
@@ -70,7 +75,27 @@ internal static class Squad
             ["today"] = today,
             ["count"] = players.Count,
             ["players"] = players,
+            ["warnings"] = warnings,
         };
+    }
+
+    /// {current: {min, max}|null, potential: {min, max}|null} on the game's 0-20 scale (half stars + 10 for senior
+    /// players). -1/-1 = not scouted -> null. Anything else outside 0..20 (or min > max) is dropped and reported.
+    public static JsonObject StarsRaw(int uid, JsonObject p, JsonArray warnings) => new()
+    {
+        ["current"] = StarRange(uid, p, "CurrentAbilityStarRange", warnings),
+        ["potential"] = StarRange(uid, p, "PotentialAbilityStarRange", warnings),
+    };
+
+    private static JsonObject StarRange(int uid, JsonObject p, string prop, JsonArray warnings)
+    {
+        if (p[prop] is not JsonObject r) return null;
+        var min = r["MinValue"].Int();
+        var max = r["MaxValue"].Int();
+        if (min == -1 && max == -1) return null;
+        if (min is int lo && max is int hi && lo >= 0 && hi <= 20 && lo <= hi) return new JsonObject { ["min"] = lo, ["max"] = hi };
+        warnings.Add($"person {uid}: {prop} {min?.ToString() ?? "?"}-{max?.ToString() ?? "?"} outside -1..20, dropped");
+        return null;
     }
 
     public static bool? Bool(JsonNode n) => n is JsonValue v && v.TryGetValue<string>(out var s) && bool.TryParse(s, out var b) ? b : null;
@@ -79,7 +104,7 @@ internal static class Squad
     public static JsonNode SortedMoney(JsonNode n) => n is JsonObject o && o["sort"] != null
         ? new JsonObject { ["display"] = o["display"].Copy(), ["value"] = o["sort"].Copy() } : null;
 
-    private static JsonObject Player(int uid, JsonObject p, JsonObject c)
+    private static JsonObject Player(int uid, JsonObject p, JsonObject c, JsonArray warnings)
     {
         var attrs = new JsonObject();
         foreach (var a in Attributes) attrs[a] = p["Attribute" + a].Copy();
@@ -92,6 +117,7 @@ internal static class Squad
             ["age"] = p["Age"].Copy(),
             ["position_mask"] = p["Position"].Copy(),
             ["attributes"] = attrs,
+            ["stars_raw"] = StarsRaw(uid, p, warnings),
             ["condition"] = p["Condition"].Copy(),
             ["fatigue"] = p["Fatigue"].Copy(),
             ["injured"] = injured,

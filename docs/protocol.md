@@ -56,19 +56,21 @@ Rules enforced by the plugin:
 | `tree` | `path=""`, `depth=2`, `max=400` | binding tree `{name, type, value, children}` | main |
 | `read` | `ref: person\|club\|team\|path\|persons`, `uid` / `uids[]` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}`, `ctx: {name: {ref\|path\|int\|bool\|string, uid\|path\|value}}` (binding contexts, see phase 1d), `each: {listprop: [subprops]}`, `max_each=50`, `probe: [names]` | decoded props; unresolved ones under `_missing` | main + polling |
 | `ctx_probe` / `tree_probe` | `ref`/`path` + `props[]` / `names[]` | data handler + required binding contexts per name (no channel opened); dev only | main |
+| `team_panel_open` | `guid`, `param=team`, `team_uid` | opens a team-scoped screen with its team (`PanelManager.Open(PanelID, param, TeamReference)`; SquadScreen GUID `7957386accba7b44d81ac248d04efbac` + a youth team → `TeamSquadReport`); dev only, UI lock | main + waits |
+| `stars_dump` / `stars_settings` | `panel`, `max` / – | star widgets of an open panel (bound vs drawn values) / the `FMStarRatingSettings` asset's youth and non-youth configurations; dev only | main |
 | `profile_info` / `profile_open` | – / `uid`, `kind=player\|nonplayer` | person-link handler's profile PanelIDs; opens a profile the way a person link does (dev only, UI lock) | main + waits |
 | `list_rows` | `panel`, `index=0`, `start=0`, `max=200` | `{panel, widgets: [{name, type, item_count, columns}], rows}`; backing data of list/table widgets (all rows, decoded) | main |
 | `nav_open` | `panel` (dev only while `~/.fm-assistant/dev-nav` exists: `guid`, or `subtab` = GUID of a visible secondary tab) | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`, `PlayerSearchReport`; `wrong-screen` if it did not open | main + waits |
 | `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
 
 | `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots, wage_structure}`; see below | main + polling |
-| `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, today, count, players: [Player]}` (`today` = `game.CurrentGameDate`, as in `training`); see below | main + polling |
+| `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, today, count, players: [Player], warnings: [str]}` (`today` = `game.CurrentGameDate`, as in `training`); see below | main + polling |
 | `staff_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Staff]}`; opens `StaffSearchReport` itself | main + polling |
-| `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
+| `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect], warnings: [str]}`; opens `PlayerSearchReport` itself | main + polling |
 | `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
 | `form` | `team=first\|reserve\|youth` | `{today, team: {uid, name, kind}, players: [Form], concerns: [uid], atmosphere: {level, text}\|null}`; see below | main + polling |
 | `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation, report}`; see below | main + polling |
-| `loans` | – | `{today, out: [Loan], intake: {date, days}}`; see below | main + polling |
+| `loans` | – | `{today, out: [Loan], intake: {date, days}, warnings: [str]}`; see below | main + polling |
 | `inbox` | `since=null` (`YYYY-MM-DD`), `tab=all\|unread`, `max=50` (1–200) | `{today, unread, items: [Item]}`; headless, no screen; see below | main + polling |
 | `ctx_check` | – | `{checked: int, mismatches: [{prop, expected: [ctx], game: [ctx]}]}`; startup check of the binding-context table (`Contexts.cs`) against `Bindings.GetHandler`; no channel opened; see "Binding contexts" | main |
 
@@ -145,7 +147,7 @@ players read about −360…−270 on build 27.0.0.2493426, higher = more tired;
 `StartDate`, `AgreedPlayingTime` (squad status `{display, sort}` → `squad_status: {display, code}`; `display` localized,
 logic uses `code`), `MinimumFeeReleaseClauseValue` (`{display, sort}` → Money; `sort` 0 / display `"-"` = none →
 `release_clause: null`), `HasRenewalOffer` (→ `renewal_offer` bool|null).
-`Player = {uid, name, age, position_mask, attributes, condition, fatigue, injured, injury: {description,
+`Player = {uid, name, age, position_mask, attributes, stars_raw, condition, fatigue, injured, injury: {description,
 return_days}|null, contract: {wage, end_date, length_days, start_date, squad_status, release_clause, renewal_offer}}`.
 
 `AgreedPlayingTime.sort` codes seen live (build 27.0.0.2493426; English meaning inferred from the localized label and the
@@ -153,6 +155,26 @@ FM status list, not read from the game): 2 on loan (currently loaned out), 5 eme
 10 breakthrough prospect, 11 backup (goalkeeper), 13 rotation / fringe player, 19 first-team backup (impact sub),
 21 first-choice goalkeeper, 22 regular starter, 23 important player, 24 star player. Other codes (squad player, future
 prospect, cup goalkeeper, not needed, trial) exist but were not held by any player in this save.
+
+### Star ranges (stars_raw)
+
+`squad`, `player_search` and `loans` read person props `CurrentAbilityStarRange` and `PotentialAbilityStarRange`
+(context-bound, contexts `team` + `human` = the viewer: the game masks them by the manager's knowledge). Each is a
+record `{MinValue, MaxValue, IsScoutsOpinion}` on a 0–20 scale, not raw ability.
+`stars_raw = {current: {min, max}|null, potential: {min, max}|null}`.
+- −1/−1 = not scouted → null (never 0 stars).
+- A value outside 0..20 (other than −1/−1), or min > max, is dropped (null) and the result's `warnings` gets
+  `"person <uid>: <prop> <min>-<max> outside -1..20, dropped"`. `warnings` is always present (`[]` normally).
+- Own players: `current` is `n-n`; `potential` is a range for young players (e.g. 14-16, 18-20) even for own
+  players. Partly scouted others read ranges (e.g. 13-14 / 15-20); unknown players −1/−1 (672 of 689 search rows).
+- Display mapping (star widget `FMStarRatingTemp`, bindings `starrating.minvalue`/`maxvalue`): drawn half-stars =
+  value − 10, i.e. **stars = (value − 10) / 2** (10 = 0, 20 = 5 stars). Verified live on the first-team SquadScreen
+  (30 players, 42 widgets, values 13–18, ranges included) and on the U21 squad (`TeamSquadReport`, 5 youth players
+  aged 17–21, values 12–17: 12→2, 13→3, 13-15→3-5, 14-16→4-6, 15-17→5-7 half-stars): the youth view uses the same
+  mapping. `FMStarRatingSettings.YouthConfig` / `NonYouthConfig` differ only in USS style classes
+  (`…-youth-true` / `…-youth-false`), not in numbers. **Values below 10 were not seen** in this save (35 own players,
+  689 search rows, the U18 team is empty), so their display is unverified: keep them unmapped.
+- Timing: `squad` 30 players ≈ 3.1 s; `player_search` 689 rows ≈ 19.9 s; `loans` ≈ 2.2 s.
 
 ### staff_search
 
@@ -179,7 +201,7 @@ Knowledge: headless attribute reads already apply the game's masking — `"-"` (
 not the table's knowledge column (whose source is not identified; it read "none" for players whose value
 knowledge was "known").
 `Prospect = {uid, name, age, position_mask, club_uid, value, asking_price, wage, contract_end, value_knowledge,
-scout_rating, attributes}`.
+scout_rating, stars_raw, attributes}`.
 
 ### form
 
@@ -264,7 +286,8 @@ Club props (`Human.Club`): `PlayersOutOnLoan` (person refs; required), `IntakeDa
 `LoanClub` (club ref → `club: {uid, name}`, name = club `Name`), `LoanContract` → `StartDate`, `EndDate`,
 `LoanAppearances` → `apps`, `LoanAverageRating` → `rating` (null when `apps` is 0, never 0.0), `LoanHappiness` (int),
 `LoanReport` → `AgreedPlayingTime` / `ActualPlayingTime` (localized strings, display only; `"-"` or empty → null).
-`Loan = {uid, name, age, club: {uid, name}, start_date, end_date, apps, rating, happiness, agreed_time, actual_time}`.
+`Loan = {uid, name, age, club: {uid, name}, start_date, end_date, apps, rating, happiness, agreed_time, actual_time,
+stars_raw}`.
 `LoanClub` is not a test for "out on loan" (it reads the own club for players at home); the list is the source.
 Loanees also stay in their team's `Players` (seen in the reserve team, squad status code 2).
 

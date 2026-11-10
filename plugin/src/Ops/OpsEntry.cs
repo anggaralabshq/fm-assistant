@@ -42,8 +42,10 @@ internal static class OpsEntry
         ["ctx_probe"] = (DevOnly(Spike.CtxProbe), 10),
         ["ctx_names"] = (DevOnly(Spike.CtxNames), 10),
         ["stars_dump"] = (DevOnly(Spike.StarsDump), 10),
+        ["stars_settings"] = (DevOnly(Spike.StarsSettings), 10),
         ["profile_info"] = (DevOnly(Spike.ProfileInfo), 10),
         ["tree_probe"] = (DevOnly(Spike.TreeProbe), 10),
         ["profile_open"] = (DevOnly(Exclusive(Spike.ProfileOpen)), 20),
+        ["team_panel_open"] = (DevOnly(Exclusive(Spike.TeamPanelOpen)), 20),
     };
 }
