@@ -16,7 +16,7 @@ def summary(form: dict) -> list[dict]:
         valid = bool(l5.get("valid"))
         known = [m for m in (l5.get("minutes") or []) if isinstance(m, int)]
         rows.append({"uid": p["uid"], "name": p["name"], "apps": apps, "rating": rating,
-                     "last5_rating": l5.get("rating") if valid else None,
+                     "last5_rating": round(l5["rating"], 2) if valid and l5.get("rating") is not None else None,
                      "last5_minutes": sum(known) if valid and known else None,
                      "concern": p["uid"] in concerns})
     return rows

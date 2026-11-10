@@ -80,3 +80,9 @@ def test_squad_form_json_shape(monkeypatch):
     assert res["players"][3]["rating"] is None
     assert [r["uid"] for r in res["flags"]["low_form"]] == [2]
     assert copy.deepcopy(res["atmosphere"]) == {"level": 4, "text": "Penuh semangat"}
+
+
+def test_last5_rating_rounded_to_two_decimals():
+    f = {"players": [{"uid": 1, "name": "Budi Santoso", "season": [{"competition": None, "apps": 4, "starts": 4, "subs": 0, "rating": 6.52499961853027}],
+                      "last5": {"rating": 6.52499961853027, "valid": True, "minutes": [90, 90]}}], "concerns": []}
+    assert form.summary(f)[0]["last5_rating"] == 6.52
