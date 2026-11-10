@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(fm --json game status)",
+      "Bash(fm --json doctor)",
+      "Bash(fm --json club budget)",
+      "Bash(fm --json squad list*)",
+      "Bash(fm --json staff search*)",
+      "Bash(fm --json staff slots)",
+      "Bash(fm --json players search*)",
+      "Bash(fm --json training show*)",
+      "Bash(fm --json training load)"
+    ],
+    "deny": [
+      "Bash(fm call*)",
+      "Bash(fm --json call*)",
+      "Bash(websocat*)",
+      "Bash(nc *)"
+    ]
+  }
+}
