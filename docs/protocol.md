@@ -191,7 +191,9 @@ Competition names: the record's `Competition` value is planted directly (`Reader
 `Name`; a `NullReference` competition (friendlies) is `competition: null`. Team props: `HappinessIssuesPlayers` (person
 refs → `concerns`), `ClubAtmosphereFeedback` (`CurrentDynamicSupportLevel` → `atmosphere.level`,
 `CurrentDynamicSupportStringShort` (localized) → `atmosphere.text`).
-`Form = {uid, name, season: [{competition, apps, starts, subs, rating}], last5: {rating, valid, minutes: [int|null]}}`.
+`Form = {uid, name, season: [{competition, apps, starts, subs, rating}], last5: {rating, valid, minutes: [int|null]},
+morale: {value, text}|null, happiness: {playing_time, club, management, training}|null}`, each area
+`{severity, change, text}|null`.
 - `season[].rating` = `AverageRating`, null when `AppearancesForRating` is 0 (never a 0.0 rating).
 - `last5.valid` = `LastFiveMatchesListHasValidFixtures` and a non-empty list; `last5.rating` is null when not valid.
 - `last5.minutes`, one per listed match (most recent first, as the game lists them): sub on/off 0/0 = 90; a sub-off
@@ -199,6 +201,27 @@ refs → `concerns`), `ClubAtmosphereFeedback` (`CurrentDynamicSupportLevel` →
   Extra time is not counted. There is no season-minutes prop.
 - Early season / friendlies only: competitive counters are 0 and `Competition` is null; ratings come from the
   friendlies' records (competition null).
+- Morale and happiness (context-bound, contexts `team` + `human` = the viewer): person props `CanViewHappinessInfo`,
+  `Morale` (int → `morale.value`), `MoraleString` (localized → `morale.text`), `HappinessPlayingTime`,
+  `HappinessClub`, `HappinessManagement`, `HappinessTraining` (records `{Severity, Description, HappinessRecentChange,
+  ProsList, ConsList, DetailedString?}` → `{severity, change, text}`; `text` = `Description` with tags removed,
+  localized, embeds the player's name). Both `morale` and `happiness` are null unless `CanViewHappinessInfo` is
+  `"True"` (other clubs' players read made-up negative `Morale` numbers). `morale` is null when `Morale` did not
+  land (never 0); an area that did not land is null.
+- Values seen live (build 27.0.0.2493426, first team 30 + reserve 5 players, one game date; youth team empty):
+  - `Morale` 9–14: 9 "Cukup Oke", 10 "Oke", 11 "Lumayan Bagus", 12 "Cukup Bagus", 13 "Bagus", 14 "Sangat Bagus"
+    (okay → very good; no low morale in this save).
+  - `playing_time`, `club`, `management` share one small scale where **lower = happier**: −5 "senang sekali"
+    (delighted), −4 "sangat senang" (very happy), −3 "senang" (happy), 0 "puas" (content). Positive values were not
+    seen; by the direction of the scale the text turns negative above 0 (inferred, not observed).
+  - `training` uses a different, wider scale where **higher = happier**: −32 and −26 "Khawatir" (worried, the only
+    negative text seen), −20 … 25 "Puas" (content), 49 "Senang" (happy), 52 "Sangat Bahagia" (very happy); its text
+    is a short label (no name). The text turns negative between −20 and −26. −111 with text `"-"` = no training
+    data (two reserve players).
+  - So no single "severity above X" threshold works for all four areas: per area, unhappy = `severity > 0` for
+    playing_time/club/management, `severity <= -26` (seen; the boundary lies in −25…−21) for training, and −111 =
+    unknown.
+  - `change` (`HappinessRecentChange`): −1, 0, 1 seen.
 
 ### fixtures
 
