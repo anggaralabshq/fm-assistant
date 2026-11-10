@@ -46,7 +46,7 @@ def test_table_has_expected_tools_and_nothing_acting():
     assert names == {"doctor", "game_status", "club_budget", "squad_list", "staff_search", "staff_slots",
                      "players_search", "training_show", "training_load", "staff_vacancies", "squad_watch",
                      "squad_depth", "players_targets", "briefing", "fixtures", "squad_contracts", "squad_form",
-                     "squad_loans"}
+                     "squad_loans", "inbox", "tactic", "squad_rotation", "trends"}
     argvs = [set(t.argv) for t in m.TOOLS]
     assert not any(a & {"launch", "restart", "load-recent", "call"} for a in argvs)
 
@@ -86,3 +86,12 @@ def test_server_registers_every_tool():
     team = next(t for t in tools if t.name == "squad_watch")
     schema = getattr(team, "input_schema", None) or getattr(team, "inputSchema", None)
     assert "youth" in json.dumps(schema)
+
+
+def test_phase1d_tools():
+    assert tool("inbox").argv_for({"unread": True, "since": "2026-09-01", "max": 5}) == [
+        "inbox", "--since", "2026-09-01", "--unread", "--max", "5"]
+    assert tool("tactic").argv_for({}) == ["tactic"]
+    assert tool("squad_rotation").argv_for({"days": 10}) == ["squad", "rotation", "--days", "10"]
+    assert tool("trends").argv_for({}) == ["trends"]
+    assert "snapshot" not in {t.name for t in m.TOOLS}   # writes a file on its own: CLI only

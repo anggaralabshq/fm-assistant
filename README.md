@@ -51,6 +51,10 @@ Back up your save folder before trying anything new; this release only reads, bu
 | `fm players search [--affordable]` | Player Database rows within your budget, as your scouts know them |
 | `fm players targets [--top 5]` | affordable Player Database rows for each thin position |
 | `fm training show [--weeks 2]` / `fm training load` | the training calendar; sessions and matches per week, tired players |
+| `fm inbox [--unread] [--since DATE]` | inbox messages, newest first; `*` unread, `!` important |
+| `fm tactic` | the active tactic's slots, roles and players; who is out of position, injured or tired (facts only) |
+| `fm squad rotation [--days 7]` | before congested fixtures: XI players injured or tired, with fitter options per slot |
+| `fm snapshot` / `fm trends` | save today's club and squad state; compare with the latest earlier snapshot (`~/.fm-assistant/snapshots/`) |
 
 Add `--json` before the command for machine output. `scripts/smoke.sh` runs all of them against the live game.
 
