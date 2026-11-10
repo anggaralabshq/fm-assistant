@@ -375,6 +375,8 @@ contract after promises).
 | `act_staff_offer` | `uid`, `wage` (base currency) | `{verified, offered: {wage, job, event}, answer, counter, patience, before, after}` | ~19 s |
 | `act_training_sessions` | `changes: [{date, slot (0–2), session_type}]` (1–21) | `{verified, changes: [{date, slot, before, after, target}]}` | ~5 s per change |
 | `act_training_focus` | `uid`, `type_row` (option value, `-1` = none) | `{verified, before: {type_row}, after, answer?}` | ~5–6 s |
+| `act_contract_open` | `uid` (own first-team player) | `{verified, promises: {playing_time}, demand, negotiation}` | ~6.5 s (2.7 s on open talks) |
+| `act_contract_offer` | `uid` | `{verified, offered: {wage, end_date, event}, answer, patience, before, after}` | ~4.5 s |
 
 Op details:
 
@@ -391,6 +393,16 @@ Op details:
   read and kept in `~/.fm-assistant/training_names.json`, so a replaced type can be set back.
 - `act_training_focus` sets the first-team player's individual additional focus on `TeamIndividualTrainingTool`;
   the option must be one the game offers that player.
+- `act_contract_open`: performs offer contract on the profile (unless the talks are already on screen). At the
+  promises stage the requested playing time (screen row `playing-time-promise`) must equal the player's current
+  squad status (`FullContract.AgreedPlayingTime` display), else `precondition` "promise differs: <requested> …"
+  with the talks left open on screen for the owner. Equal → finalize promises (41), negotiate contract (140).
+  `promises.playing_time` is null when the talks were already past the promises. `demand = {wage, loyalty_bonus,
+  agent_fee, end_date, add_ons: [{name, value}]}`: money values are Money; `add_ons` are the session's
+  `AddOnList` (bonuses and clauses in one list, game order) named headless, value as the screen shows it.
+- `act_contract_offer` needs the contract stage of uid on screen and not read-only; sends the terms as they stand
+  (finalize deal, 41). `answer`: `accepted` (the contract now ends on the offered date), `pending` (read-only: the
+  player decides later), `rejected` (patience 0 or talks closed), `countered` (terms rewritten).
 
 Negotiation = `{open, on_screen, stage, wage, job, end_date, board_max_wage, wage_over_board_max, patience: {status,
 value}, changed_by_other_party, read_only, key_info: [text]}`, read headless from `Person.ContractEditSession`

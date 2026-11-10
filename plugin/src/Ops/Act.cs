@@ -1179,4 +1179,166 @@ internal static class Act
         var after = await Until(() => Focus(uid, ct), f => f.Row == target, 4000, ct);
         return Res(before.Row, after.Row, after.Row == target);
     }
+
+    // ------------------------------------------------------------------ F5: contract renewal
+
+    /// {own, code, display}: whether uid plays for the human's first team, and its current squad status
+    /// (FullContract.AgreedPlayingTime).
+    private static async Task<(bool Own, int? Code, string Display)> OwnStatus(int uid, CancellationToken ct)
+    {
+        await using var scope = new ReadScope(ct);
+        var tp = await scope.ReadOne(() => Path_("Human.Team"), new[] { "Players" }, 3000);
+        var players = tp["Players"]?.Value;
+        var own = await Reader.Main(() => Reader.ListElems(players, 200).Any(e =>
+        {
+            try { return e.Get()?.TryCast<FM.UI.DatabaseRecordReference>()?.m_index == uid; } catch { return false; }
+        }), ct);
+        var pp = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { "FullContract" }, 2500);
+        var fc = pp["FullContract"]?.Value;
+        var cp = await scope.ReadOne(() => fc, new[] { "AgreedPlayingTime" }, 2500);
+        var c = (await scope.Collect(new List<Plant> { cp }))[0];
+        var st = c["AgreedPlayingTime"] as JsonObject;
+        return (own, st?["sort"].Int(), st?["display"]?.ToString());
+    }
+
+    private const int NegotiateContractEvent = 140;   // promises stage, after the promises are finalized
+
+    /// Main thread. The texts of a negotiation-screen row (label first, then its value parts), "-"/"+" step buttons dropped.
+    private static List<string> RowTexts(string rowName)
+    {
+        var res = new List<string>();
+        var p = Ui.OpenPanels().Find(x => Ui.PanelId(x) == NegotiationPanel);
+        UnityEngine.UIElements.VisualElement row = null;
+        if (p != null) Ui.Walk(p, 0, n => { if (row == null && n.name == rowName && Ui.Visible(n)) row = n; });
+        if (row != null) Ui.Walk(row, 0, n =>
+        {
+            var t = Ui.Visible(n) ? Ui.OwnText(n) : null;
+            if (!string.IsNullOrWhiteSpace(t) && t != "-" && t != "+") res.Add(t.Trim());
+        });
+        return res;
+    }
+
+    /// The requested playing-time promise as the screen shows it (the row's value under its label).
+    private static string PromiseShown() { var t = RowTexts("playing-time-promise"); return t.Count >= 2 ? t[1] : null; }
+
+    /// The contract-stage terms the player asks for: the session's prefilled values, add-ons named headless
+    /// (AddOnList.Name) with their value as the screen shows it.
+    private static async Task<JsonObject> Demand(int uid, JsonObject neg, CancellationToken ct)
+    {
+        await using var scope = new ReadScope(ct);
+        var p = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { "ContractEditSession" }, 2000, NegotiationCtx);
+        var session = p["ContractEditSession"]?.Value ?? throw new OpException("binding-api-changed", "person ContractEditSession did not resolve");
+        var sp = await scope.ReadOne(() => session, new[] { "LoyaltyBonus", "AgentFee", "AddOnList" }, 3000, NegotiationCtx);
+        var addOnList = sp["AddOnList"]?.Value;
+        var elems = addOnList == null ? new List<TypedValue>() : await Reader.Main(() => Reader.ListElems(addOnList, 20), ct);
+        var plants = new List<Plant> { sp };
+        foreach (var e in elems) { var x = e; plants.Add(await scope.ReadOne(() => x, new[] { "Name" }, 2500, NegotiationCtx)); }
+        var got = await scope.Collect(plants);
+        var names = got.Skip(1).Select(o => Str(o["Name"])).ToList();
+        var (loyalty, fee, texts) = await Reader.Main(() => (Money.Of(got[0]["LoyaltyBonus"]), Money.Of(got[0]["AgentFee"]), RowTexts("add-on-list")), ct);
+        var addOns = new JsonArray();
+        for (var i = 0; i < names.Count; i++)
+        {
+            var at = texts.IndexOf(names[i]);
+            var next = i + 1 < names.Count ? texts.IndexOf(names[i + 1]) : texts.Count;
+            var value = at < 0 || next <= at + 1 ? null : texts[at + 1];   // the shown value; raw digits follow it
+            addOns.Add(new JsonObject { ["name"] = names[i], ["value"] = value });
+        }
+        return new JsonObject
+        {
+            ["wage"] = neg["wage"].Copy(), ["loyalty_bonus"] = loyalty, ["agent_fee"] = fee, ["end_date"] = neg["end_date"].Copy(),
+            ["add_ons"] = addOns,
+        };
+    }
+
+    private static async Task<int> SpeakWhenShown(int uid, int ev, string sessionProp, CancellationToken ct)
+    {
+        for (var t = 0; ; t++)
+        {
+            try { return await Speak(uid, e => e == ev, ct, sessionProp); }
+            catch (OpException e) when (t < 10 && (e.Code == "ui-element-missing" || e.Code == "precondition")) { await Task.Delay(500, ct); }
+        }
+    }
+
+    /// {uid, apply_token} -> {verified, promises: {playing_time}, demand, negotiation}: opens renewal talks with an own
+    /// first-team player (PersonOfferContract). At the promises stage the requested playing time must equal the
+    /// player's current squad status; then the promises are finalized and the contract stage opened. A differing
+    /// request stops with `precondition`, the talks left open on screen. Already-open talks for uid are reused.
+    public static async Task<JsonNode> ContractOpenOp(JsonObject a, CancellationToken ct)
+    {
+        var uid = Uid(a);
+        await Career(ct);
+        var (own, _, display) = await OwnStatus(uid, ct);
+        if (!own) throw new OpException("precondition", $"person {uid} is not in the first team");
+        if (!(bool)(await ReadNegotiation(uid, ct))["on_screen"])
+        {
+            await OpenProfile(uid, true, ct);
+            await Perform(OfferContract, uid, n => true, ct);
+            await Until(() => Reader.Main(ScreenStage, ct), x => x != null, 8000, ct);
+            await Task.Delay(800, ct);
+        }
+        var stage = await Reader.Main(ScreenStage, ct);
+        if (stage == null) throw new OpException("ui-element-missing", "the negotiation screen did not open");
+        string requested = null;
+        if (stage == "promises")
+        {
+            requested = await Reader.Main(PromiseShown, ct);
+            if (requested == null) throw new OpException("ui-element-missing", "playing-time promise row not readable");
+            if (requested != display)
+                throw new OpException("precondition", $"promise differs: {requested} (current status {display}); the talks are left open on screen for the owner");
+            await Speak(uid, e => e == FinalizeEvent, ct, "PreContractPromisesEditSession");
+            await SpeakWhenShown(uid, NegotiateContractEvent, "PreContractPromisesEditSession", ct);
+            stage = await Until(() => Reader.Main(ScreenStage, ct), x => x == "contract", 8000, ct);
+            await Task.Delay(800, ct);
+        }
+        var neg = await ReadNegotiation(uid, ct);
+        return new JsonObject
+        {
+            ["verified"] = stage == "contract" && (bool)neg["on_screen"] && !(bool)neg["read_only"],
+            ["promises"] = new JsonObject { ["playing_time"] = requested },
+            ["demand"] = await Demand(uid, neg, ct),
+            ["negotiation"] = neg,
+        };
+    }
+
+    private static async Task<string> ContractEnd(int uid, CancellationToken ct)
+    {
+        await using var scope = new ReadScope(ct);
+        var p = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { "FullContract" }, 2500);
+        var fc = p["FullContract"]?.Value;
+        var cp = await scope.ReadOne(() => fc, new[] { "EndDate" }, 2500);
+        return Str((await scope.Collect(new List<Plant> { cp }))[0]["EndDate"]);
+    }
+
+    /// {uid, apply_token} -> {verified, offered, answer, patience, before, after}: sends the contract-stage terms as
+    /// they stand ("finalize deal") to an own player whose renewal talks are on screen (contract.open first).
+    /// answer: pending (read-only, the player thinks it over), accepted (the contract now ends on the offered date),
+    /// rejected (patience gone or talks closed), countered (the player rewrote the terms).
+    public static async Task<JsonNode> ContractOfferOp(JsonObject a, CancellationToken ct)
+    {
+        var uid = Uid(a);
+        await Career(ct);
+        if (!(await OwnStatus(uid, ct)).Own) throw new OpException("precondition", $"person {uid} is not in the first team");
+        var before = await ReadNegotiation(uid, ct);
+        if (!(bool)before["on_screen"] || Str(before["stage"]) != "contract")
+            throw new OpException("precondition", "open the renewal first: the contract stage for this person is not on screen (contract.open)");
+        if ((bool)before["read_only"]) throw new OpException("precondition", "negotiation is read-only (an offer is already pending)");
+        var ev = await Speak(uid, e => e == FinalizeEvent, ct);
+        var after = await Until(() => ReadNegotiation(uid, ct), n => (bool)n["changed_by_other_party"] || (bool)n["read_only"]
+            || (n["patience"]["status"].Int() ?? 0) != 0 || !(bool)n["on_screen"], 6000, ct);
+        await Task.Delay(1000, ct);
+        after = await ReadNegotiation(uid, ct);
+        var accepted = await ContractEnd(uid, ct) == Str(before["end_date"]);
+        var answer = accepted ? "accepted" : (bool)after["read_only"] ? "pending"
+            : (after["patience"]["value"].Int() ?? 1) <= 0 || !(bool)after["on_screen"] ? "rejected"
+            : (bool)after["changed_by_other_party"] ? "countered" : "pending";
+        return new JsonObject
+        {
+            ["verified"] = true,
+            ["offered"] = new JsonObject { ["wage"] = before["wage"].Copy(), ["end_date"] = before["end_date"].Copy(), ["event"] = ev },
+            ["answer"] = answer,
+            ["patience"] = after["patience"].Copy(),
+            ["before"] = before, ["after"] = after,
+        };
+    }
 }
