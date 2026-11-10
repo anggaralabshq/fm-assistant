@@ -28,7 +28,7 @@ def test_load_previous_picks_latest_not_after(tmp_path):
     for d in ("2026-08-01", "2026-08-20", "2026-09-10"):
         trends.save(S(date=d), tmp_path)
     assert trends.load_previous(900001, "2026-09-05", tmp_path)["date"] == "2026-08-20"
-    assert trends.load_previous(900001, "2026-09-10", tmp_path)["date"] == "2026-09-10"   # same day counts: re-run = days 0
+    assert trends.load_previous(900001, "2026-09-10", tmp_path)["date"] == "2026-08-20"   # earlier day beats same day
     assert trends.load_previous(900001, "2026-07-01", tmp_path) is None
 
 
@@ -122,3 +122,22 @@ def test_snap_dir_env_override(monkeypatch, tmp_path):
     assert trends.default_dir() == tmp_path / "x"
     monkeypatch.delenv("FM_ASSISTANT_SNAP_DIR")
     assert trends.default_dir().parts[-2:] == (".fm-assistant", "snapshots")
+
+
+def test_previous_prefers_earlier_day_over_todays_briefing_snapshot(tmp_path):
+    trends.save(S(date="2026-08-25", balance=1), tmp_path)
+    trends.save(S(date="2026-09-01", balance=2), tmp_path)   # briefing earlier today saved this
+    assert trends.load_previous(900001, "2026-09-01", tmp_path)["date"] == "2026-08-25"
+    assert trends.load_previous(900001, "2026-08-25", tmp_path)["date"] == "2026-08-25"   # nothing earlier: same day
+
+
+def test_trends_refuses_when_snapshots_are_dated_after_today(tmp_path, monkeypatch):
+    # another career at the same club, or an older save reloaded: comparing would mix two timelines
+    trends.save(S(date="2026-12-01"), tmp_path)
+    trends.save(S(date="2026-07-01"), tmp_path)
+    monkeypatch.setattr(trends, "SNAP_DIR", tmp_path)
+    fake_calls(monkeypatch, {"hello": HELLO, "club": fixture("club.json"), "squad": fixture("squad.json"),
+                             "form": fixture("form.json")})
+    res = json.loads(run("--json", "trends").stdout)["result"]
+    assert res["diff"] is None and res["previous"] is None and res["later_snapshot"] == "2026-12-01"
+    assert "dated after today" in run("trends").stdout

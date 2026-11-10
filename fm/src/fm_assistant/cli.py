@@ -252,11 +252,12 @@ def trends_cmd(st):
     """Save today's snapshot, then compare with the latest earlier one of this club."""
     need_hello(st)
     snap = _snapshot()
-    prev = trends_mod.load_previous(snap["club_uid"], snap["date"])   # before saving: a same-day re-run compares days 0
+    later = trends_mod.later_snapshot(snap["club_uid"], snap["date"])
+    prev = None if later else trends_mod.load_previous(snap["club_uid"], snap["date"])   # read before saving
     path = trends_mod.save(snap)
     d = trends_mod.diff(prev, snap) if prev else None
-    emit(st, {"saved": str(path), "date": snap["date"], "previous": prev and prev["date"], "diff": d},
-         trends_mod.text(snap, prev, d))
+    emit(st, {"saved": str(path), "date": snap["date"], "previous": prev and prev["date"], "diff": d,
+              "later_snapshot": later}, trends_mod.text(snap, prev, d, later))
 
 
 @main.group()

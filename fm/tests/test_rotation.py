@@ -88,3 +88,8 @@ def test_rotation_cli(monkeypatch):
     assert "Pemain 105" in text and "Pemain 201" in text
     for word in ("should", "change", "ganti", "recommend"):
         assert word not in text.lower()
+
+
+def test_weekly_schedule_is_not_congested():
+    # today + 7 days is next week's match day: a normal weekly rhythm, not 2 matches "in the next 7 days"
+    assert hints([fx(14, 1), fx(21, 2)])["matches_in_window"] == 1

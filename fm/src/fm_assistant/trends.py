@@ -42,20 +42,35 @@ def save(snap: dict, root: Path | None = None) -> Path:
     return path
 
 
-def load_previous(club_uid, before_date: str, root: Path | None = None) -> dict | None:
-    """Latest snapshot of this club dated on or before `before_date` (the same day counts, so a re-run diffs with
-    days 0). Files that are unreadable or belong to another club are ignored."""
+def _snaps(club_uid, root: Path | None = None):
+    """This club's readable snapshots, newest first. Unreadable files and other clubs' files are skipped."""
     folder = Path(root or SNAP_DIR) / str(club_uid)
     for f in sorted(folder.glob("*.json"), reverse=True) if folder.is_dir() else []:
-        if f.stem > before_date:
-            continue
         try:
             snap = json.loads(f.read_text())
         except (OSError, ValueError):
             continue
         if isinstance(snap, dict) and snap.get("club_uid") == club_uid:
+            yield snap
+
+
+def load_previous(club_uid, before_date: str, root: Path | None = None) -> dict | None:
+    """Latest snapshot of this club dated strictly before `before_date`; only when none exists, a same-day one
+    (so a briefing earlier today never hides last week's snapshot, and a re-run still diffs with days 0)."""
+    same_day = None
+    for snap in _snaps(club_uid, root):
+        if snap.get("date", "") < before_date:
             return snap
-    return None
+        if snap.get("date") == before_date and same_day is None:
+            same_day = snap
+    return same_day
+
+
+def later_snapshot(club_uid, today: str, root: Path | None = None) -> str | None:
+    """Date of a snapshot newer than today: another career at this club or an older save reloaded.
+    ponytail: no career id in the plugin yet, so time going backwards is the signal; add the human uid when exposed."""
+    newest = next(_snaps(club_uid, root), None)
+    return newest["date"] if newest and newest.get("date", "") > today else None
 
 
 def _change(a, b):
@@ -87,7 +102,10 @@ def diff(old: dict, new: dict) -> dict:
             "new_injuries": hurt, "recovered": healed}
 
 
-def text(snap: dict, prev: dict | None, d: dict | None) -> str:
+def text(snap: dict, prev: dict | None, d: dict | None, later: str | None = None) -> str:
+    if later:
+        return (f"not compared: this club has a snapshot dated after today ({later}), so it is from another career or"
+                f" a reloaded older save. Move {Path(SNAP_DIR) / str(snap['club_uid'])} aside to start fresh.")
     if prev is None or d is None:
         return "no earlier snapshot for this club (saved today's; run again after the game date moves on)"
 

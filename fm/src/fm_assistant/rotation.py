@@ -9,9 +9,9 @@ MAX_OPTIONS = 3
 
 def hints(fit_rows: list, squad_players: list, upcoming: list, today: date, form_rows: list,
           window_days: int = 7, condition_min: int = 90) -> dict:
-    """matches_in_window: fixtures from today through today + window_days. With fewer than 2, nothing else is filled.
+    """matches_in_window: fixtures from today up to (not including) today + window_days. With fewer than 2, nothing else is filled.
     at_risk: XI players injured or under condition_min. options: per at-risk slot, bench players who cover it."""
-    n = sum(1 for f in upcoming or [] if (d := days_until(f, today)) is not None and 0 <= d <= window_days)
+    n = sum(1 for f in upcoming or [] if (d := days_until(f, today)) is not None and 0 <= d < window_days)
     out = {"matches_in_window": n, "at_risk": [], "options": {}}
     if n < 2:
         return out
