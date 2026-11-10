@@ -60,6 +60,7 @@ Rules enforced by the plugin:
 | `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
 
 | `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots}`; see below | main + polling |
+| `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, count, players: [Player]}`; see below | main + polling |
 
 There is no generic click op. Discovery ops are read-only.
 
@@ -80,6 +81,18 @@ Human club (`Human.Club` uid) props: `TransferBudget`, `WageBudget` (per week), 
 Known gap: the ClubScreen "transfer/wage budget" tile showed Rp5,75M while `TransferBudget` formats to Rp5,71M
 (build 27.0.0.2493426); the tile's source is a VisualFunction not identified yet. Finance (`Keuangan`) is a
 secondary-tab dropdown (`SecondaryTabDropdownButton`, no SIButton), not reachable by `ClickSubtab` yet.
+
+### squad
+
+Teams: club props `MainTeam` (first), `HighestLevelYouthTeam` (reserve, e.g. U21), `YouthTeam` (e.g. U18; may be
+empty). `Team.Players` → person refs, read in batches of 10. Player props: `Name`, `Age`, `Position` (position bit
+mask, multi-position; decoded by `fm_assistant.positions`), `Condition` (percent, 0–100), `Fatigue` (signed; fresh
+players read about −360…−270 on build 27.0.0.2493426, higher = more tired; no threshold used yet), `IsInjured`
+(`"True"`/`"False"`), `CurrentInjury` (`InjuryDescription`, `InjuryReturnDays`), visible `Attribute*` (47 names, see
+`Squad.Attributes`; off the ball is `AttributeMovement`; hidden personality attributes are never requested),
+`FullContract` → `Wage` (`{display, sort}` → Money), `EndDate`, `ContractLength` (days left).
+`Player = {uid, name, age, position_mask, attributes, condition, fatigue, injured, injury: {description,
+return_days}|null, contract: {wage, end_date, length_days}}`.
 
 ## Navigation routes (nav_open)
 
