@@ -23,3 +23,10 @@ internal static class JsonCopy
     /// .NET 6 has no JsonNode.DeepClone; nodes already parented must be copied before reuse.
     public static JsonNode Copy(this JsonNode n) => n == null ? null : JsonNode.Parse(n.ToJsonString());
 }
+
+internal static class JsonNum
+{
+    /// Decoded numbers arrive as int or double depending on the property; null for anything else.
+    public static int? Int(this JsonNode n) => n is JsonValue v
+        ? (v.TryGetValue<int>(out var i) ? i : v.TryGetValue<double>(out var d) ? (int)d : null) : null;
+}

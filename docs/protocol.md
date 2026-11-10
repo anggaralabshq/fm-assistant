@@ -63,6 +63,7 @@ Rules enforced by the plugin:
 | `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, count, players: [Player]}`; see below | main + polling |
 | `staff_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Staff]}`; opens `StaffSearchReport` itself | main + polling |
 | `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
+| `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
 
 There is no generic click op. Discovery ops are read-only.
 
@@ -122,6 +123,17 @@ not the table's knowledge column (whose source is not identified; it read "none"
 knowledge was "known").
 `Prospect = {uid, name, age, position_mask, club_uid, value, asking_price, wage, contract_end, value_knowledge,
 scout_rating, attributes}`.
+
+### training
+
+Month view of `TrainingScreen` (35 or 42 days, Monday first). Each day = one `EventsList` widget (backing rows:
+`EventType` 1000 = session with `SessionName` (localized), `SessionType` (int, language-neutral), `DayIndex`
+(weekday 0–6), `SessionIndex`; 1001 = match with `TeamOpponent` → team `AbbreviatedName`), paired in screen order
+with the day headers (binding `day.DayOfTheMonth`, e.g. `31 Agu`, `1 Sep`, `2`) and week schedule names
+(`week.TrainingScheduleName`, one per row of 7). `today` = `game.CurrentGameDate`.
+`Day = {index, day_label, day_of_month, weekday, schedule, sessions[3], session_types[3], match}`; a match slot is
+`null` in `sessions`/`session_types`. The view is the month the screen shows (normally today's month), so days
+after its last week are not included.
 
 ## Navigation routes (nav_open)
 
