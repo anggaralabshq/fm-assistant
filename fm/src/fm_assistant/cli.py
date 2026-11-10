@@ -13,6 +13,7 @@ from . import briefing as briefing_mod
 from . import fixtures as fixtures_mod
 from . import stars as stars_mod
 from . import rolefit as rolefit_mod
+from . import rotation as rotation_mod
 from . import inbox as inbox_mod
 from . import form as form_mod
 from . import loans as loans_mod
@@ -351,6 +352,22 @@ def squad_loans(st):
             + (f"\nFlagged (no appearances {loans_mod.UNUSED_AFTER_DAYS}+ days into the loan): "
                + ", ".join(l["name"] for l in flagged) if flagged else "") + warn_line(res))
     emit(st, {**res, "flagged": flagged}, text)
+
+
+@squad.command("rotation")
+@click.option("--days", type=click.IntRange(1, 30), default=7, show_default=True, help="Window in days.")
+@click.pass_obj
+def squad_rotation(st, days):
+    """Options for tired or injured XI players when 2+ matches fall in the window (facts, no instructions)."""
+    need_hello(st)
+    c = FmClient()
+    tactic = c.call("tactic")
+    sq = c.call("squad", team="first")
+    fx = c.call("fixtures", n=10)
+    fo = form_mod.summary(c.call("form", team="first"))
+    rows = rolefit_mod.check(tactic, sq)
+    h = rotation_mod.hints(rows, sq["players"], fx.get("upcoming") or [], date.fromisoformat(fx["today"]), fo, days)
+    emit(st, {**h, "window_days": days}, rotation_mod.text(h, days))
 
 
 def _depth_for(team: str = "first") -> dict:
