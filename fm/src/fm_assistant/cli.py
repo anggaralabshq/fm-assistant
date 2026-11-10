@@ -11,6 +11,7 @@ from . import contracts as contracts_mod
 from . import depth as depth_mod
 from . import briefing as briefing_mod
 from . import fixtures as fixtures_mod
+from . import stars as stars_mod
 from . import inbox as inbox_mod
 from . import form as form_mod
 from . import loans as loans_mod
@@ -170,6 +171,14 @@ def table(rows: list[list], header: list[str]) -> str:
     return "\n".join("  ".join(c.ljust(w[i]) for i, c in enumerate(r)).rstrip() for r in rows)
 
 
+def star_cols(p: dict) -> list[str]:
+    return [stars_mod.fmt(p["stars"]["current"]), stars_mod.fmt(p["stars"]["potential"])]
+
+
+def warn_line(res: dict) -> str:
+    return "\nwarnings: " + "; ".join(map(str, res["warnings"])) if res.get("warnings") else ""
+
+
 def shown(res: dict) -> str:
     return f"{res['returned']} of {res['count']} shown" if res.get("truncated") else f"{res['returned']} shown"
 
@@ -242,8 +251,9 @@ def squad():
 def squad_list(st, team):
     need_hello(st)
     s = squad_mod.normalize(FmClient().call("squad", team=team))
-    emit(st, s, table([[p["name"], p.get("age"), p["position"], p.get("condition"), p.get("injured")]
-                       for p in s["players"]], ["name", "age", "position", "condition", "injured"]))
+    emit(st, s, table([[p["name"], p.get("age"), p["position"], p.get("condition"), p.get("injured"),
+                        *star_cols(p)] for p in s["players"]],
+                      ["name", "age", "position", "condition", "injured", "ability", "potential"]) + warn_line(s))
 
 
 @squad.command("watch")
@@ -332,13 +342,13 @@ def squad_loans(st):
         head = "Out on loan\n" + table(
             [[l["name"], l.get("age"), l["club"]["name"], l.get("start_date"), l.get("end_date"), l["apps"],
               "no matches yet" if l["rating"] is None else f"{l['rating']:.2f}", l.get("agreed_time"),
-              l.get("actual_time")] for l in res["out"]],
-            ["name", "age", "club", "from", "to", "apps", "rating", "agreed time", "actual time"])
+              l.get("actual_time"), *star_cols(l)] for l in res["out"]],
+            ["name", "age", "club", "from", "to", "apps", "rating", "agreed time", "actual time", "ability", "potential"])
     else:
         head = "Out on loan: none"
     text = (head + "\n" + loans_mod.intake_line(res.get("intake"))
             + (f"\nFlagged (no appearances {loans_mod.UNUSED_AFTER_DAYS}+ days into the loan): "
-               + ", ".join(l["name"] for l in flagged) if flagged else ""))
+               + ", ".join(l["name"] for l in flagged) if flagged else "") + warn_line(res))
     emit(st, {**res, "flagged": flagged}, text)
 
 
@@ -463,9 +473,9 @@ def players_search(st, max_, affordable):
         club_ = c.call("club")
         res["rows"] = players_mod.affordable(res["rows"], club_["transfer_budget"]["value"], budget.wage_headroom(club_))
     emit(st, res, table([[p["name"], p.get("age"), p["position"], budget.fmt(p.get("asking_price") or p.get("value")),
-                          budget.fmt(p.get("wage")), p.get("scout_rating")] for p in res["rows"]],
-                        ["name", "age", "position", "price", "wage", "scout"])
-         + f"\n{shown(res)}" + (f", {len(res['rows'])} affordable" if affordable else ""))
+                          budget.fmt(p.get("wage")), p.get("scout_rating"), *star_cols(p)] for p in res["rows"]],
+                        ["name", "age", "position", "price", "wage", "scout", "ability", "potential"])
+         + f"\n{shown(res)}" + (f", {len(res['rows'])} affordable" if affordable else "") + warn_line(res))
 
 
 @players.command("targets")
@@ -490,8 +500,8 @@ def players_targets(st, top, max_):
     for s in thin:
         parts.append(f"\n{s['slot']} (fit {s['fit']}/{s['min']})")
         parts.append(table([[p["name"], p.get("age"), p["position"], budget.fmt(p.get("asking_price") or p.get("value")),
-                             budget.fmt(p.get("wage")), p.get("scout_rating"), "budget?" if p["budget_unknown"] else ""]
-                            for p in picked[s["slot"]]], ["name", "age", "position", "price", "wage", "scout", ""])
+                             budget.fmt(p.get("wage")), p.get("scout_rating"), *star_cols(p), "budget?" if p["budget_unknown"] else ""]
+                            for p in picked[s["slot"]]], ["name", "age", "position", "price", "wage", "scout", "ability", "potential", ""])
                      if picked[s["slot"]] else "no affordable candidates")
     parts.append(f"\n{shown(found)}, {len(rows)} affordable")
     emit(st, out, "\n".join(parts))

@@ -1,6 +1,8 @@
 """Loans out and the youth intake (F7)."""
 from datetime import date
 
+from .stars import with_stars
+
 UNUSED_AFTER_DAYS = 21
 
 
@@ -13,8 +15,8 @@ def _parse(s) -> date | None:
 
 def normalize(res: dict) -> dict:
     """A loanee with no appearances has rating None (the game's 0 means nothing played)."""
-    return {**res, "out": [{**l, "rating": l.get("rating") if (l.get("apps") or 0) > 0 else None}
-                           for l in res.get("out") or []]}
+    return {**res, "out": with_stars([{**l, "rating": l.get("rating") if (l.get("apps") or 0) > 0 else None}
+                                      for l in res.get("out") or []])}
 
 
 def flags(out: list, today: date) -> list[dict]:

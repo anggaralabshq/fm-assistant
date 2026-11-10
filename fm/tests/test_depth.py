@@ -58,7 +58,9 @@ def test_minimums_override(tmp_path):
     assert by_slot(depth.depth(SQUAD, m))["ST (C)"]["thin"] is False
 
 
-def test_targets_order_budget_known_then_young():
+def test_targets_order_budget_known_then_young_when_no_stars():
+    # Phase 1d changed the 1b order: youth no longer ranks first. Rows without scouted stars (all unknown) fall back
+    # to budget-known, then younger; with stars, quality decides (see test_stars.test_targets_quality_before_youth).
     rows = [
         {"name": "A", "age": 30, "position_mask": 16, "budget_unknown": False},
         {"name": "B", "age": 18, "position_mask": 16, "budget_unknown": True},

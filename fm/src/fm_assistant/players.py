@@ -1,9 +1,10 @@
 """Player search helpers. Attribute values stay exactly as the UI shows them (ranges like "8-12", or null)."""
 from .positions import decode
+from .stars import with_stars
 
 
 def normalize(raw: dict) -> dict:
-    return {**raw, "rows": [{**r, "position": decode(r.get("position_mask") or 0)} for r in raw["rows"]]}
+    return {**raw, "rows": with_stars([{**r, "position": decode(r.get("position_mask") or 0)} for r in raw["rows"]])}
 
 
 def affordable(rows: list, transfer_budget: float, wage_headroom: float) -> list[dict]:
