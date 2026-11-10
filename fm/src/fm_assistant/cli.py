@@ -673,13 +673,16 @@ def apply_cmd(ctx, plan_id):
     """Back up the save, then perform an approved plan in the game. Only run after the owner said yes."""
     st = ctx.find_object(State)
     h = need_hello(st)
-    res = apply_mod.run(plan_id, FmClient(), h)
+    try:
+        res = apply_mod.run(plan_id, FmClient(), h)
+    except ValueError as e:     # unknown plan or not proposed: nothing was sent
+        fail(ctx, 3, "bad-plan", str(e), str(e))
     if res.get("error"):     # nothing was sent
         fail(ctx, 3, res["error"]["code"], res["error"]["detail"], res["error"]["detail"])
     lines = []
     for r in res["actions"]:
         word = {"ok": "ok", "failed": "FAIL", "skipped": "SKIP"}[r["status"]]
-        why = (r.get("result") or {}).get("answer") if r["status"] == "ok" else \
+        why = (r.get("result") or {}).get("answer") or "verified" if r["status"] == "ok" else \
             f"{r['error']['code']}: {r['error']['detail']}" if r["status"] == "failed" else "not attempted"
         lines.append(f"{word} {r['describe']}: {why}")
     lines.append(f"backup: {res['backup']['path']} (sha256 {res['backup']['sha256'][:12]})")

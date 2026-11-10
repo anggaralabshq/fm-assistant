@@ -148,3 +148,14 @@ def test_log_tail():
     r = run("log", "--n", "3")
     assert r.exit_code == 0 and r.stdout.count("\n") == 3
     assert [e["n"] for e in json.loads(run("--json", "log", "--n", "2").stdout)["result"]] == [3, 4]
+
+
+def test_cli_apply_text_without_answer_and_reapply_error(monkeypatch, save):
+    # live: shortlist add returns {verified, before, after} with no answer
+    p = mkplan(("shortlist.add", {"uid": 1}))
+    patch_client(monkeypatch, Fake({"verified": True, "before": {}, "after": {}}))
+    r = run("apply", p["id"])
+    assert r.exit_code == 0 and r.stdout.splitlines()[0].endswith(": verified")
+    r = run("apply", p["id"])
+    assert r.exit_code == 3 and "bad-plan" in run("--json", "apply", p["id"]).stdout
+    assert "only a proposed plan" in r.stderr and "Unexpected data" not in r.stderr
