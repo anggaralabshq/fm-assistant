@@ -181,3 +181,34 @@ def test_training_load(monkeypatch):
 
 def test_doctor_features_listed():
     assert [op for _, op, _ in doctor.FEATURES] == ["club", "squad", "staff_search", "player_search", "training"]
+
+
+def test_malformed_game_data_is_one_line_not_traceback(monkeypatch):
+    club = fixture("club.json")
+    club["wage_budget"] = None
+    fake_calls(monkeypatch, {"hello": HELLO, "club": club})
+    r = run("--json", "club", "budget")
+    assert r.exit_code == 3
+    assert "Traceback" not in r.output
+    assert json.loads(r.output.splitlines()[0])["error"]["code"] == "internal"
+
+
+def test_training_other_month_asks_for_current_month(monkeypatch):
+    cal = fixture("training.json")
+    cal["today"] = "2026-10-20"
+    fake_calls(monkeypatch, {"hello": HELLO, "training": cal})
+    r = run("training", "show")
+    assert r.exit_code == 3 and "Traceback" not in r.output
+    assert "current month" in r.output
+
+
+def test_staff_search_reads_1000_rows_by_default(monkeypatch):
+    calls = fake_calls(monkeypatch, {"hello": HELLO, "staff_search": fixture("staff_search.json")})
+    run("staff", "search", "--role", "scout")
+    assert ("staff_search", {"max": 1000}) in calls
+
+
+def test_timeout_message_is_not_game_closed(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "club": FmError("club", "timeout", "no answer in 35s")})
+    r = run("club", "budget")
+    assert r.exit_code == 3 and "not running" not in r.output and "did not answer" in r.output

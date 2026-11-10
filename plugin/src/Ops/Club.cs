@@ -22,9 +22,11 @@ internal static class Club
         await using var scope = new ReadScope(ct);
         var cp = await scope.ReadOne(() => Reader.ClubRef(uid), ClubProps);
         var c = (await scope.Collect(new List<Plant> { cp }))[0];
+        Reader.Require(c, "club", "TransferBudget", "WageBudget", "CommittedWageSpending", "RemainingWageBudget", "MainTeam");
         var team = cp["MainTeam"]?.Value;
         var tp = await scope.ReadOne(() => team, new[] { Groups[0].Prop, Groups[1].Prop, Groups[2].Prop });
         var t = (await scope.Collect(new List<Plant> { tp }))[0];
+        Reader.Require(t, "team", Groups[0].Prop, Groups[1].Prop, Groups[2].Prop);
         return await Reader.Main(() =>
         {
             var slots = new JsonObject();

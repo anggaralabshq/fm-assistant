@@ -26,6 +26,10 @@ def human_error(e: FmError) -> str:
     if e.code == "wrong-screen":
         screen = e.detail.removeprefix("expected ").split(",")[0] if e.detail.startswith("expected ") else e.detail
         return f"Open {screen} first."
+    if e.code == "timeout":
+        return f"FM27 did not answer in time ({e.op}). It may be on a heavy screen or still loading; try again."
+    if e.code == "busy":
+        return "FM27 is busy with other requests. Try again in a moment."
     if e.code == "bindings-not-captured":
         return "FM27 is still starting. Try again in a moment."
     return f"{e.code}: {e.detail}"
@@ -43,6 +47,10 @@ class FmGroup(click.Group):
             fail(ctx, 3, e.code, e.detail, human_error(e))
         except game_mod.Refused as e:
             fail(ctx, 3, "refused", str(e), str(e))
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
+            # ponytail: unexpected data shape (renamed game property, untested build) -> one line, no traceback
+            fail(ctx, 3, "internal", f"{type(e).__name__}: {e}",
+                 f"Unexpected data from the game ({type(e).__name__}: {e}). Run `fm doctor`; the game build may be untested.")
 
 
 def fail(ctx, code: int, err: str, detail: str, message: str):
@@ -203,7 +211,7 @@ def staff():
 @staff.command("search")
 @click.option("--role", required=True, help="Role key from staff_roles.json, e.g. coach_attacking, scout.")
 @click.option("--max-wage", type=float, help="Drop staff whose known wage demand is above this (base-currency value).")
-@click.option("--max", "max_", type=click.IntRange(1, 1000), default=200, show_default=True, help="Rows to read.")
+@click.option("--max", "max_", type=click.IntRange(1, 1000), default=1000, show_default=True, help="Rows to read.")
 @click.option("--top", type=click.IntRange(1), default=10, show_default=True)
 @click.pass_obj
 def staff_search(st, role, max_wage, max_, top):
@@ -211,7 +219,7 @@ def staff_search(st, role, max_wage, max_, top):
     if role not in roles:
         raise click.BadParameter(f"valid: {', '.join(sorted(roles))}", param_hint="--role")
     need_hello(st)
-    res = FmClient(timeout=95).call("staff_search", max=max_)
+    res = FmClient().call("staff_search", max=max_)
     ranked = staff_mod.rank(res["rows"], role, max_wage, roles)[:top]
     out = {**res, "role": role, "rows": ranked}
     emit(st, out, table([[s["score"], s["name"], s.get("age"), s.get("preferred_job"),
@@ -256,8 +264,11 @@ def training():
 
 
 def _training_days() -> tuple[list, date]:
-    cal = FmClient(timeout=95).call("training")
-    return training_mod.with_dates(cal), date.fromisoformat(cal["today"])
+    cal = FmClient().call("training")
+    try:
+        return training_mod.with_dates(cal), date.fromisoformat(cal["today"])
+    except ValueError as e:
+        raise FmError("training", "wrong-screen", f"expected TrainingScreen on the current month ({e})") from e
 
 
 @training.command("show")

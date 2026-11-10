@@ -54,13 +54,40 @@ def test_unavailable_when_pid_dead(fake):
         FmClient(f.session).call("hello")
 
 
-def test_unavailable_when_server_never_answers(fake):
-    f = fake(lambda req: None)
-    with pytest.raises(FmUnavailable):
-        FmClient(f.session, timeout=0.5).call("hello")
 
 
 def test_non_ascii_round_trip(fake):
     f = fake(lambda req: {"ok": True, "result": req["args"]["names"]})
     names = ["Rúben Gonçalves", "広瀬 圭"]
     assert FmClient(f.session).call("echo", names=names) == names
+
+
+def test_slow_op_waits_for_its_op_timeout(fake, monkeypatch):
+    import time
+    from fm_assistant import client
+    monkeypatch.setitem(client.OP_TIMEOUTS, "slow_op", 1)
+    f = fake(lambda req: (time.sleep(1.2), {"ok": True, "result": 7})[1])
+    assert FmClient(f.session, timeout=0.3).call("slow_op") == 7
+
+
+def test_no_answer_is_timeout_not_unavailable(fake):
+    f = fake(lambda req: None)
+    with pytest.raises(FmError) as e:
+        FmClient(f.session, timeout=0.3).call("unlisted_op")
+    assert e.value.code == "timeout"
+
+
+def test_503_is_busy(fake, monkeypatch):
+    from websockets.datastructures import Headers
+    from websockets.exceptions import InvalidStatus
+    from websockets.http11 import Response
+    from fm_assistant import client
+    f = fake(lambda req: {"ok": True, "result": None})
+
+    def refuse(*a, **k):
+        raise InvalidStatus(Response(503, "Service Unavailable", Headers()))
+
+    monkeypatch.setattr(client, "connect", refuse)
+    with pytest.raises(FmError) as e:
+        FmClient(f.session).call("hello")
+    assert e.value.code == "busy"

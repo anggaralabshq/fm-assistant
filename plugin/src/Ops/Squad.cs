@@ -44,6 +44,7 @@ internal static class Squad
             club = (await scope.Collect(new List<Plant> { await scope.ReadOne(() => Reader.ClubRef(clubUid), new[] { "Name", teamProp }) }))[0];
             var teamUid = (int?)(club[teamProp] as JsonObject)?["uid"] ?? throw new OpException("ui-element-missing", $"club has no {teamProp}");
             team = (await scope.Collect(new List<Plant> { await scope.ReadOne(() => Reader.TeamRef(teamUid), new[] { "Name", "Players" }) }))[0];
+            Reader.Require(team, "team", "Players");
             team["uid"] = teamUid;
             uids = (team["Players"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
                 .Where(r => (string)r["$ref"] == "Person").Select(r => (int)r["uid"]).Take(MaxPlayers).ToList();

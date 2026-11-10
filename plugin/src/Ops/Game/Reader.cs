@@ -35,10 +35,12 @@ internal sealed class Prop
     public TypedValue Value;
 }
 
-/// Owns every plant made through it; DisposeAsync closes them on the main thread on every path.
+/// Owns every plant made through it. Plants are registered on the main thread the moment they exist (so a
+/// cancelled op or a throw half-way through a batch still releases them), and DisposeAsync always enqueues the
+/// close job, which the FIFO main-thread queue runs after any plant job still waiting.
 internal sealed class ReadScope : IAsyncDisposable
 {
-    private readonly List<Plant> _plants = new List<Plant>();
+    private readonly List<Plant> _owned = new List<Plant>();   // main thread only
     private readonly CancellationToken _ct;
     public ReadScope(CancellationToken ct) { _ct = ct; }
 
@@ -48,10 +50,16 @@ internal sealed class ReadScope : IAsyncDisposable
         {
             if (!Native.Resolve(out var problem)) return R<List<Plant>>.Err("binding-api-changed", problem);
             var l = new List<Plant>();
-            foreach (var p in parents) l.Add(Reader.PlantOne(p(), props));
+            try
+            {
+                foreach (var p in parents) l.Add(Reader.PlantOne(p(), props, _owned));
+            }
+            catch (Exception e)  // never e.ToString() on the main thread
+            {
+                return R<List<Plant>>.Err("binding-api-changed", $"plant: {e.GetType().Name}: {e.Message}");
+            }
             return l;
         }, _ct);
-        _plants.AddRange(plants);
         var deadline = Environment.TickCount64 + waitMs;
         while (Environment.TickCount64 < deadline)
         {
@@ -70,17 +78,24 @@ internal sealed class ReadScope : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_plants.Count == 0) return;
-        // Not tied to the op's token: cleanup must run even after a timeout.
-        await Reader.Main(() => { foreach (var p in _plants) Reader.Close(p); return 0; }, CancellationToken.None);
-        _plants.Clear();
+        // Always enqueued, never tied to the op's token, long deadline: cleanup must run even after a cancel or a
+        // stalled main thread. Waits a bounded time, never throws (it must not mask the op's own error).
+        var job = Plugin.Queue.Run(() =>
+        {
+            foreach (var p in _owned) Reader.Close(p);
+            _owned.Clear();
+            return R<int>.Ok(0);
+        }, CleanupDeadlineMs);
+        await Task.WhenAny(job, Task.Delay(Reader.HopTimeoutMs));
     }
+
+    private const int CleanupDeadlineMs = 10 * 60 * 1000;
 }
 
 internal static class Reader
 {
     public const int PollMs = 150;
-    private const int HopTimeoutMs = 10000;
+    internal const int HopTimeoutMs = 10000;
     // Seeded so node names from a reloaded ops assembly never collide with an earlier load's.
     private static int _counter = Environment.TickCount & 0x3fffffff;
 
@@ -105,11 +120,19 @@ internal static class Reader
     public static TypedValue ClubRef(int uid) => Wrap(new FM.UI.ClubReference(uid).Cast<Il2CppSystem.Object>());
     public static TypedValue TeamRef(int uid) => Wrap(new FM.UI.TeamReference(uid).Cast<Il2CppSystem.Object>());
 
+    /// WS thread: required props that did not land mean the game build renamed or moved them.
+    public static void Require(JsonObject o, string what, params string[] names)
+    {
+        var missing = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(names, n => o[n] == null));
+        if (missing.Count > 0)
+            throw new OpException("binding-api-changed", $"{what}: {string.Join(", ", missing)} did not resolve (renamed in this game build?)");
+    }
+
     public static uint Id(string name) => PropertyIdentifierSet.Instance.GetID(Il2CppSystem.MemoryExtensions.AsSpan(name)).ID;
 
     // ------------------------------------------------------------ main thread
 
-    internal static Plant PlantOne(TypedValue parent, string[] props)
+    internal static Plant PlantOne(TypedValue parent, string[] props, List<Plant> owner = null)
     {
         var b = Plugin.Bindings;
         var plant = new Plant();
@@ -120,6 +143,7 @@ internal static class Reader
         // Flat name at the root (no dotted path) so Remove leaves no intermediate node behind.
         plant.ParentKey = Native.CreatePath(b, "__fm_" + Interlocked.Increment(ref _counter), Bindings.NodeFlags.Default);
         plant.HasParent = true;
+        owner?.Add(plant);   // registered before any Bind, so a throw below still gets it closed
         foreach (var name in props)
         {
             var prop = new Prop { Name = name };

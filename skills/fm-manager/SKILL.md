@@ -13,7 +13,7 @@ Answer in Indonesian. Never tactics, never decide for the owner.
 1. `fm --json game status`. `running` false → ask the owner to start FM27 from Steam. `career_loaded` false → ask
    them to load their career. Stop there.
 2. `build_supported` false → first line of the answer: game build X is untested; numbers may be wrong.
-3. Run only the commands the request needs (table below). A command exiting non-zero → quote its stderr line, stop.
+3. Run only the commands the request needs (table below). A command exiting non-zero → quote its stderr line, stop (exit 2 = game/plugin not running, 3 = game-side problem).
 
 | Request | Commands |
 |---|---|
@@ -31,7 +31,8 @@ Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `phy
 - `wage_demand` is always null in this version: the demand appears only when offering a contract in the game.
   `current_wage` is what they earn now, not their price. Say so once.
 - `count` = rows the game's search screen holds; `returned` = rows read; `--top N` limits what is shown.
-  `truncated: true` is the only sign of an incomplete read.
+  `truncated: true` means only `returned` of `count` rows were read: say "peringkat ini hanya dari X dari Y
+  baris" in the first sentence and suggest narrowing the search filter in the game.
 - Staff slots: `summary` is the game's own sentence (trust it). `max` is the board's target, so `used > max` is normal.
 - `preferred_job` differs from the role asked → mention it in that candidate's reason.
 - Player attributes: `14` known, `"6-10"` a range, `"-"` unknown (not scouted). Never present a range as a value.

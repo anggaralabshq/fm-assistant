@@ -9,14 +9,20 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from websockets.exceptions import WebSocketException
+from websockets.exceptions import InvalidStatus, WebSocketException
 from websockets.sync.client import connect
 
 SESSION_PATH = Path.home() / ".fm-assistant" / "session.json"
 
+# Server-side op timeouts (plugin OpsEntry/OpRegistry). The client waits OP_TIMEOUT + 5 s so a slow read is
+# reported by the plugin (or as "timeout"), never as "game not running".
+OP_TIMEOUTS = {"hello": 10, "diag": 5, "dev_reload": 30, "panels": 10, "ui_dump": 10, "prop_check": 10, "tree": 10,
+               "read": 60, "list_rows": 15, "load_recent_save": 10, "nav_open": 30, "club": 30, "squad": 90,
+               "staff_search": 90, "player_search": 90, "training": 60}
+
 
 class FmUnavailable(Exception):
-    """Plugin not reachable: no session file, dead game process, connection refused or no answer in time."""
+    """Plugin not reachable: no session file, dead game process, connection refused."""
 
 
 class FmError(Exception):
@@ -55,15 +61,25 @@ class FmClient:
         s = self.session()
         req_id = uuid.uuid4().hex
         req = {"v": 1, "id": req_id, "op": op, "args": args, "token": s["token"]}
+        wait = max(self.timeout, OP_TIMEOUTS.get(op, 0) + 5)
         try:
-            with connect(f"ws://127.0.0.1:{s['port']}", open_timeout=self.timeout, close_timeout=1,
-                         max_size=None) as ws:
+            ws = connect(f"ws://127.0.0.1:{s['port']}", open_timeout=self.timeout, close_timeout=1, max_size=None)
+        except InvalidStatus as e:
+            if e.response.status_code == 503:
+                raise FmError(op, "busy", "plugin connection limit reached") from e
+            raise FmUnavailable(f"port {s['port']}: {e!r}") from e
+        except (OSError, TimeoutError, WebSocketException) as e:
+            raise FmUnavailable(f"port {s['port']}: {e!r}") from e
+        try:
+            with ws:
                 ws.send(json.dumps(req, ensure_ascii=False))
                 while True:
-                    msg = json.loads(ws.recv(timeout=self.timeout))
-                    if msg.get("id") == req_id:
+                    msg = json.loads(ws.recv(timeout=wait))
+                    if isinstance(msg, dict) and msg.get("id") == req_id:
                         break
-        except (OSError, TimeoutError, WebSocketException) as e:
+        except TimeoutError as e:
+            raise FmError(op, "timeout", f"no answer in {wait:g}s") from e
+        except (OSError, WebSocketException) as e:
             raise FmUnavailable(f"port {s['port']}: {e!r}") from e
         if msg.get("ok"):
             return msg.get("result")

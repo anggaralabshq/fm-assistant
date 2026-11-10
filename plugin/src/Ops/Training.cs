@@ -37,10 +37,19 @@ internal static class Training
     public static async Task<JsonNode> Read(JsonObject a, CancellationToken ct)
     {
         await Nav.EnsureOpen(Panel, ct);
-        await Task.Delay(500, ct);   // day lists bind after the panel opens
-        var (heads, weeks, days) = await Reader.MainR(Screen, ct);
+        // Day lists, headers and week names bind a few frames after the panel opens: poll until complete.
+        (List<string> heads, List<string> weeks, List<JsonArray> days) screen = default;
+        for (var tries = 0; tries < 20; tries++)
+        {
+            screen = await Reader.MainR(Screen, ct);
+            var (h, w, d) = screen;
+            if (h.Count > 0 && h.Count == d.Count && h.Count % 7 == 0 && w.Count == h.Count / 7) break;
+            await Task.Delay(250, ct);
+        }
+        var (heads, weeks, days) = screen;
         if (heads.Count == 0 || heads.Count != days.Count)
             throw new OpException("ui-element-missing", $"{heads.Count} day headers vs {days.Count} day lists");
+        if (weeks.Count != heads.Count / 7) weeks = new List<string>();   // never pair a partial list by position
         var opponents = days.SelectMany(d => d.OfType<JsonObject>())
             .Where(e => e["EventType"].Int() == MatchEvent && e["TeamOpponent"] is JsonObject)
             .Select(e => e["TeamOpponent"]["uid"].Int() ?? 0).Distinct().ToList();
@@ -70,7 +79,10 @@ internal static class Training
                 weekday ??= e["DayIndex"].Int();
                 sessions.Add(e["SessionName"].Copy()); types.Add(e["SessionType"].Copy());
             }
-            var digits = new string(heads[k].TakeWhile(char.IsDigit).ToArray());
+            while (sessions.Count < 3) { sessions.Add(null); types.Add(null); }   // always 3 slots
+            // The header is localized ("31 Agu", "1 Sep", "Sep 1"): take the first ASCII digit run anywhere.
+            var digits = System.Text.RegularExpressions.Regex.Match(heads[k], "[0-9]+").Value;
+            if (digits.Length == 0) throw new OpException("ui-element-missing", $"day header {k} has no day number: '{heads[k]}'");
             outDays.Add(new JsonObject
             {
                 ["index"] = k,

@@ -46,7 +46,7 @@ internal static class Nav
     };
 
     /// Dev discovery: GUIDs not mapped to a name yet may be opened while ~/.fm-assistant/dev-nav exists.
-    private static bool DevGuids => System.IO.File.Exists(System.IO.Path.Combine(Session.Dir, "dev-nav"));
+    internal static bool DevGuids => System.IO.File.Exists(System.IO.Path.Combine(Session.Dir, "dev-nav"));
 
     private static PanelID FindLoaded(string name)
     {
@@ -180,9 +180,24 @@ internal static class Nav
         await WaitOpen(panel, 8000, ct);
     }
 
+    /// Navigation only from the normal game screens: the title bar's tab menu must be showing. Refuses during
+    /// matches, press conferences, full-screen dialogs or the main menu, where a tab click could change state.
+    private static R<bool> OnGameScreens()
+    {
+        var bar = Ui.OpenPanels().Find(p => Ui.PanelId(p) == "OverviewTitleBar");
+        UnityEngine.UIElements.VisualElement menu = null;
+        if (bar != null) Ui.Walk(bar, 0, n => { if (menu == null && n.name == "MenuBar" && Ui.Visible(n)) menu = n; });
+        return menu != null ? true : R<bool>.Err("wrong-screen",
+            "FM27 is not on a normal game screen (no tab menu: match, press conference, dialog or main menu). Go back to the main screens first.");
+    }
+
+    /// One UI-driving op at a time: parallel tool calls must not click tabs in the middle of each other's reads.
+    public static readonly SemaphoreSlim UiLock = new SemaphoreSlim(1, 1);
+
     /// Used by read ops before reading a screen.
     public static async Task EnsureOpen(string panel, CancellationToken ct)
     {
+        if (await Reader.Main(() => !Ui.IsOpen(panel), ct)) await Reader.MainR(OnGameScreens, ct);
         if (Routes.ContainsKey(panel))
         {
             if (await Reader.MainR(() => FmAssistant.Tree.HumanClubUid() == null

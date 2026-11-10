@@ -65,7 +65,16 @@ Rules enforced by the plugin:
 | `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
 | `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
 
-There is no generic click op. Discovery ops are read-only.
+There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
+manager cannot see (hidden attributes), so they answer only in dev mode (file `~/.fm-assistant/dev-nav` exists);
+otherwise `bad-request`. UI-driving ops (`nav_open`, `staff_search`, `player_search`, `training`) run one at a
+time, and navigate only while the title bar's tab menu (`OverviewTitleBar > MenuBar`) is showing (`wrong-screen`
+otherwise: match, press conference, full-screen dialog, main menu). Reads raise `binding-api-changed` when a
+required property does not resolve. Read bindings are owned by a scope on the main thread and released on every
+path (cancel, throw), by a cleanup job queued after any pending plant job.
+
+Client timeouts: the CLI waits each op's server timeout + 5 s. No answer by then → error code `timeout`; the
+plugin's connection limit (HTTP 503) → `busy`. Neither is reported as "game not running".
 
 ### Money
 

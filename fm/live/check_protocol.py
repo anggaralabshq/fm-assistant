@@ -1,4 +1,5 @@
-"""Live check (Task 2): protocol v1 server rules against the running game with a loaded career.
+"""Needs dev mode (touch ~/.fm-assistant/dev-nav): it uses the read/tree discovery ops.
+Live check (Task 2): protocol v1 server rules against the running game with a loaded career.
 
 Usage: uv run --project fm python fm/live/check_protocol.py
 """
