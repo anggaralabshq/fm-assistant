@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
 from . import contracts as contracts_mod
 from . import depth as depth_mod
+from . import form as form_mod
 from . import vacancies as vacancies_mod
 from . import doctor as doctor_mod
 from . import game as game_mod
@@ -250,6 +251,33 @@ def squad_contracts(st, team):
                       w["total"]["display"], flag[w["over"]]] for w in structure],
                     ["status", "count", "average", "highest", "lowest", "advised max", "total", "over"]))
     emit(st, {"today": today.isoformat(), "players": rows, "wage_structure": structure}, text)
+
+
+@squad.command("form")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_form(st, team):
+    """Season rating, last five matches and squad concerns. 'no matches yet' = nothing played, not bad form."""
+    need_hello(st)
+    f = FmClient().call("form", team=team)
+    rows = form_mod.summary(f)
+    fl = form_mod.flags(rows)
+
+    def rate(v, none="no matches yet"):
+        return none if v is None else f"{v:.2f}"
+
+    def names(key):
+        return ", ".join(r["name"] for r in fl[key]) or "none"
+
+    text = (table([[r["name"], r["apps"], rate(r["rating"]), rate(r["last5_rating"], "-"), r["last5_minutes"],
+                    "yes" if r["concern"] else ""] for r in rows],
+                  ["name", "apps", "rating", "last 5", "last 5 min", "concern"])
+            + f"\n\nLow form (last 5 under {form_mod.LOW_FORM}): {names('low_form')}"
+            + f"\nUnused (no appearances): {names('unused')}"
+            + f"\nConcerns: {names('concerns')}"
+            + f"\nClub atmosphere: {(f.get('atmosphere') or {}).get('text') or '?'}")
+    emit(st, {"today": f["today"], "team": f["team"], "players": rows, "flags": fl,
+              "atmosphere": f.get("atmosphere")}, text)
 
 
 def _depth_for(team: str = "first") -> dict:
