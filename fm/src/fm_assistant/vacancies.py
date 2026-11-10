@@ -49,6 +49,7 @@ def fill(jobs: list, staff: dict, roles: dict, job_roles: dict, top: int = 3) ->
                 if c["uid"] not in best or c["score"] > best[c["uid"]]["score"]:
                     best[c["uid"]] = c
         cands = sorted(best.values(), key=lambda c: (c.get("preferred_job_type") != jt, -c["score"]))
-        out.append({**job, "roles": list(mapped), "candidates": cands, "truncated": staff["truncated"],
+        # matching = searched rows preferring this job; 0 means the game's Staff Search filter is set for other jobs
+        out.append({**job, "roles": list(mapped), "candidates": cands, "matching": len(same), "truncated": staff["truncated"],
                     "returned": staff["returned"], "count": staff["count"]})
     return out

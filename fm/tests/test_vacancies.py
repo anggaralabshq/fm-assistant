@@ -85,3 +85,17 @@ def test_staff_vacancies_text_says_ranked_among(monkeypatch):
     assert "Pemandu Bakat: 2 open" in r.stdout
     j = json.loads(run("--json", "staff", "vacancies").stdout)["result"]
     assert (j["count"], j["returned"], j["truncated"]) == (5000, 1, True) and len(j["jobs"]) == 4
+
+
+def test_fill_counts_rows_preferring_the_job():
+    out = vacancies.fill(jobs(14, 12), staff_res([row(1, 14, 9), row(2, 14, 7), row(3, 58, 12)]), ROLES, JOB_ROLES)
+    assert [j["matching"] for j in out] == [2, 0]
+
+
+def test_staff_vacancies_text_warns_when_no_row_prefers_the_job(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "club": fixture("club_jobs.json"),
+                             "staff_search": staff_res([row(1, 14, 9), row(2, 58, 12)])})
+    r = run("staff", "vacancies")
+    assert r.exit_code == 0, r.output
+    physio = r.stdout.split("Fisioterapis")[1]
+    assert "0 of 2 searched staff prefer this job" in physio.split("\n\n")[0]

@@ -302,6 +302,9 @@ def staff_vacancies(st, top):
         t = table([[s["score"], s["role"], s["name"], s.get("age"), s.get("preferred_job"),
                     budget.fmt(s.get("wage_demand")), budget.fmt(s.get("current_wage"))] for s in j["candidates"]],
                   ["score", "role", "name", "age", "job", "wage demand", "current wage"])
+        if not j["matching"]:
+            t += (f"\n0 of {j['returned']} searched staff prefer this job: set the game's Staff Search filter"
+                  " to this job for better candidates")
         blocks.append(head + "\n" + "\n".join("  " + ln for ln in t.splitlines()))
     text = "\n\n".join(blocks) or "No open staff jobs."
     if res["truncated"]:

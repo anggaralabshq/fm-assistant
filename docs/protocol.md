@@ -102,7 +102,7 @@ mask, multi-position; decoded by `fm_assistant.positions`), `Condition` (percent
 players read about −360…−270 on build 27.0.0.2493426, higher = more tired; no threshold used yet), `IsInjured`
 (`"True"`/`"False"`), `CurrentInjury` (`InjuryDescription`, `InjuryReturnDays`), visible `Attribute*` (47 names, see
 `Squad.Attributes`; off the ball is `AttributeMovement`; hidden personality attributes are never requested),
-`FullContract` → `Wage` (`{display, sort}` → Money), `EndDate`, `ContractLength` (days left).
+`FullContract` → `Wage` (`{display, sort}` → Money), `EndDate`, `ContractLength` (total contract length in days, start → end; NOT days left — use `EndDate`).
 `Player = {uid, name, age, position_mask, attributes, condition, fatigue, injured, injury: {description,
 return_days}|null, contract: {wage, end_date, length_days}}`.
 
