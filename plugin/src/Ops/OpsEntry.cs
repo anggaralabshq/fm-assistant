@@ -36,5 +36,6 @@ internal static class OpsEntry
         ["training"] = (Exclusive(Training.Read), 60),
         ["form"] = (Form.Read, 90),
         ["fixtures"] = (Fixtures.Read, 60),
+        ["loans"] = (Loans.Read, 60),
     };
 }

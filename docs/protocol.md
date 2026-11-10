@@ -66,6 +66,7 @@ Rules enforced by the plugin:
 | `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
 | `form` | `team=first\|reserve\|youth` | `{today, team: {uid, name, kind}, players: [Form], concerns: [uid], atmosphere: {level, text}\|null}`; see below | main + polling |
 | `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation}`; see below | main + polling |
+| `loans` | – | `{today, out: [Loan], intake: {date, days}}`; see below | main + polling |
 
 There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
 manager cannot see (hidden attributes), so they answer only in dev mode (file `~/.fm-assistant/dev-nav` exists);
@@ -187,6 +188,17 @@ the comp value once per comp uid). Opponent names: team `Name`; `opponent_format
   `upcoming[0]` equals `next` when both exist. Beyond the fifth fixture only league fixtures are known (cup ties after
   the fifth are missing).
 - No next fixture: `next: null`, `threat: null`, `opponent_formation: null`.
+
+### loans
+
+Club props (`Human.Club`): `PlayersOutOnLoan` (person refs; required), `IntakeDate` → `intake.date`,
+`DaysUntilYouthIntake` → `intake.days`. Per loanee (batches of 10; none read when the list is empty): `Name`, `Age`,
+`LoanClub` (club ref → `club: {uid, name}`, name = club `Name`), `LoanContract` → `StartDate`, `EndDate`,
+`LoanAppearances` → `apps`, `LoanAverageRating` → `rating` (null when `apps` is 0, never 0.0), `LoanHappiness` (int),
+`LoanReport` → `AgreedPlayingTime` / `ActualPlayingTime` (localized strings, display only; `"-"` or empty → null).
+`Loan = {uid, name, age, club: {uid, name}, start_date, end_date, apps, rating, happiness, agreed_time, actual_time}`.
+`LoanClub` is not a test for "out on loan" (it reads the own club for players at home); the list is the source.
+Loanees also stay in their team's `Players` (seen in the reserve team, squad status code 2).
 
 ### training
 
