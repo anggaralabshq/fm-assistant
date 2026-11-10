@@ -34,5 +34,6 @@ internal static class OpsEntry
         ["staff_search"] = (Exclusive(Staff.Search), 90),
         ["player_search"] = (Exclusive(Players.Search), 90),
         ["training"] = (Exclusive(Training.Read), 60),
+        ["form"] = (Form.Read, 90),
     };
 }

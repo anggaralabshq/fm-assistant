@@ -64,6 +64,7 @@ Rules enforced by the plugin:
 | `staff_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Staff]}`; opens `StaffSearchReport` itself | main + polling |
 | `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
 | `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
+| `form` | `team=first\|reserve\|youth` | `{today, team: {uid, name, kind}, players: [Form], concerns: [uid], atmosphere: {level, text}\|null}`; see below | main + polling |
 
 There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
 manager cannot see (hidden attributes), so they answer only in dev mode (file `~/.fm-assistant/dev-nav` exists);
@@ -148,6 +149,25 @@ not the table's knowledge column (whose source is not identified; it read "none"
 knowledge was "known").
 `Prospect = {uid, name, age, position_mask, club_uid, value, asking_price, wage, contract_end, value_knowledge,
 scout_rating, attributes}`.
+
+### form
+
+Team as in `squad` (`Team.Players`, read in batches of 10). Person props: `Name`, `SeasonStatsList` (one record per
+competition: `Competition` comp ref or `NullReference`, `Appearances`, `StartingAppearances`, `SubAppearances`,
+`AppearancesForRating`, `AverageRating`), `LastFiveClubMatchesForm` (`LastFiveMatchesRating`,
+`LastFiveMatchesListHasValidFixtures`, `LastFiveMatchesList[]` with `MinuteSubOn`/`MinuteSubOff`/`MinuteSentOff`).
+Competition names: the record's `Competition` value is planted directly (`Reader.ListField`) once per comp uid, prop
+`Name`; a `NullReference` competition (friendlies) is `competition: null`. Team props: `HappinessIssuesPlayers` (person
+refs → `concerns`), `ClubAtmosphereFeedback` (`CurrentDynamicSupportLevel` → `atmosphere.level`,
+`CurrentDynamicSupportStringShort` (localized) → `atmosphere.text`).
+`Form = {uid, name, season: [{competition, apps, starts, subs, rating}], last5: {rating, valid, minutes: [int|null]}}`.
+- `season[].rating` = `AverageRating`, null when `AppearancesForRating` is 0 (never a 0.0 rating).
+- `last5.valid` = `LastFiveMatchesListHasValidFixtures` and a non-empty list; `last5.rating` is null when not valid.
+- `last5.minutes`, one per listed match (most recent first, as the game lists them): sub on/off 0/0 = 90; a sub-off
+  minute ends the stint, else a sending-off minute, else 90; minus the sub-on minute. Unreadable or negative → null.
+  Extra time is not counted. There is no season-minutes prop.
+- Early season / friendlies only: competitive counters are 0 and `Competition` is null; ratings come from the
+  friendlies' records (competition null).
 
 ### training
 
