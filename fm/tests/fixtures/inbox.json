@@ -1,0 +1,10 @@
+{"today": "2026-09-14", "unread": 2, "items": [
+  {"id": 448, "date": "2026-09-14", "time": "09:30", "read": false, "important": true, "category": 3,
+   "title": "Tawaran untuk Rúben Gonçalves", "body": "Klub Laut Timur mengajukan tawaran."},
+  {"id": 220, "date": "2026-09-14", "time": "08:05", "read": true, "important": false, "category": 1,
+   "title": "Laporan scout mingguan", "body": "Tiga pemain baru dipantau."},
+  {"id": 198, "date": "2026-09-13", "time": "17:00", "read": false, "important": false, "category": 2,
+   "title": "Cedera: Budi Santoso", "body": "Budi Santoso absen dua minggu."},
+  {"id": 574, "date": "2026-09-12", "time": "10:00", "read": true, "important": false, "category": 1,
+   "title": "Sambutan dewan klub", "body": "x"}
+]}

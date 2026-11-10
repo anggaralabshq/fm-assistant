@@ -42,7 +42,7 @@ def test_briefing_text_max_12_lines():
 
 
 def test_briefing_cli_calls_no_staff_search(monkeypatch):
-    p = parts()
+    p = parts(inbox=fixture("inbox.json"))
     calls = fake_calls(monkeypatch, {"hello": HELLO, **p})
     r = run("--json", "briefing")
     assert r.exit_code == 0, r.output + r.stderr

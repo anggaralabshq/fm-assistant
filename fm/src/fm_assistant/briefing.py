@@ -1,7 +1,7 @@
 """Session briefing (F1-lite): one summary over the read ops. A failed part is {"error": code}; the rest still runs."""
 from datetime import date
 
-from . import fixtures as fixtures_mod, form as form_mod, loans as loans_mod, training as training_mod
+from . import fixtures as fixtures_mod, form as form_mod, inbox as inbox_mod, loans as loans_mod, training as training_mod
 from . import vacancies as vacancies_mod, watch as watch_mod
 
 PARTS = ("squad", "training", "fixtures", "form", "club", "loans")
@@ -70,6 +70,12 @@ def build(parts: dict) -> dict:
         else:
             b["loans_flagged"] = b["intake_days"] = lo or {"error": "missing"}
 
+    def inbox_part():
+        ib = parts["inbox"]
+        b["inbox"] = {"unread": ib["unread"], "recent": inbox_mod.recent(ib)} if _ok(ib) else ib or {"error": "missing"}
+
+    if "inbox" in parts:  # optional: callers without an inbox read simply get no key
+        _guard(b, ("inbox",), inbox_part)
     _guard(b, ("next_fixture",), fixture_part)
     _guard(b, ("injuries", "expiring", "tired"), squad_part)
     _guard(b, ("concerns", "low_form"), form_part)
@@ -103,6 +109,8 @@ def text(b: dict) -> str:
         label = "fixtures" if isinstance(nf, dict) and "error" in nf else "next match"
         section(label, nf, lambda f: f"{f['opponent']['name']} {f['date']} ({fixtures_mod.venue(f)}"
                                           f"{', in ' + str(f['days_until']) + ' d' if f.get('days_until') is not None else ''})")
+    section("inbox", b.get("inbox"), lambda i: f"{i['unread']} unread" + (
+        "; recent: " + "; ".join(r["title"] for r in i["recent"][:2]) if i["recent"] else ""))
     section("injured", b.get("injuries"), lambda rs: "; ".join(
         f"{r['name']} back {r['return_date'] or '?'}" + (
             "" if r["matches_missed"] is None else f", misses {'≥' if r['beyond_view'] else ''}{r['matches_missed']}")

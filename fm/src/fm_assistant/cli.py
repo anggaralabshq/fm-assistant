@@ -11,6 +11,7 @@ from . import contracts as contracts_mod
 from . import depth as depth_mod
 from . import briefing as briefing_mod
 from . import fixtures as fixtures_mod
+from . import inbox as inbox_mod
 from . import form as form_mod
 from . import loans as loans_mod
 from . import vacancies as vacancies_mod
@@ -190,8 +191,26 @@ def briefing_cmd(st):
             parts[op] = c.call(op, **args)
         except FmError as e:  # one failed part never hides the others; FmUnavailable still stops the command
             parts[op] = {"error": e.code}
+    today = (parts.get("squad") or {}).get("today") or (parts.get("fixtures") or {}).get("today")
+    since = (date.fromisoformat(today) - timedelta(days=1)).isoformat() if today else None
+    try:
+        parts["inbox"] = c.call("inbox", since=since, tab="all", max=20)
+    except FmError as e:
+        parts["inbox"] = {"error": e.code}
     b = briefing_mod.build(parts)
     emit(st, b, briefing_mod.text(b))
+
+
+@main.command("inbox")
+@click.option("--since", help="Only messages on or after this date (YYYY-MM-DD).")
+@click.option("--unread", is_flag=True, help="Unread messages only.")
+@click.option("--max", "max_", type=click.IntRange(1, 200), default=20, show_default=True)
+@click.pass_obj
+def inbox_cmd(st, since, unread, max_):
+    """Inbox messages, newest first ('*' unread, '!' important)."""
+    need_hello(st)
+    res = FmClient().call("inbox", since=since, tab="unread" if unread else "all", max=max_)
+    emit(st, res, inbox_mod.text(res, since))
 
 
 @main.group()
