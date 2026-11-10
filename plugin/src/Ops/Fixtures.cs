@@ -15,7 +15,7 @@ internal static class Fixtures
     private const int HomeLocation = 1;   // NextMatchLocation seen as 1 when the own team was HomeTeam
     private static readonly string[] FixtureProps = { "FixtureDate", "HomeTeam", "AwayTeam", "Competition" };
 
-    /// {"n": 5} (1-10) -> {today, team_uid, next: Fixture|null, upcoming: [Fixture], threat, opponent_formation}
+    /// {"n": 5} (1-10) -> {today, team_uid, next: Fixture|null, upcoming: [Fixture], threat, opponent_formation, report}
     public static async Task<JsonNode> Read(JsonObject a, CancellationToken ct)
     {
         var n = Meta.Int(a, "n", 5, 1, 10);
@@ -66,10 +66,13 @@ internal static class Fixtures
         var names = new Dictionary<int, string>();
         for (var i = 0; i < teamUids.Count; i++) names[teamUids[i]] = (string)tr[i]["Name"];
         string formation = null;
+        bool? report = null;
         if (nextVal != null && fixtures[0].Opp is int ou)
         {
-            var orow = (await scope.Collect(new List<Plant> { await scope.ReadOne(() => Reader.TeamRef(ou), new[] { "MostUsedFormation" }) }))[0];
+            // HasTeamReport: context TeamRequestingReport = the viewer's team (Contexts)
+            var orow = (await scope.Collect(new List<Plant> { await scope.ReadOne(() => Reader.TeamRef(ou), new[] { "MostUsedFormation", "HasTeamReport" }) }))[0];
             formation = NonEmpty(orow["MostUsedFormation"]);
+            report = Squad.Bool(orow["HasTeamReport"]);
         }
 
         JsonObject next = null;
@@ -97,6 +100,7 @@ internal static class Fixtures
             ["upcoming"] = new JsonArray(upcoming.ToArray()),
             ["threat"] = nextVal != null ? NonEmpty(t["NextOppositionThreatLevelAssessment"]) : null,
             ["opponent_formation"] = formation,
+            ["report"] = next != null ? report : null,
         };
     }
 

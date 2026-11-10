@@ -67,8 +67,9 @@ Rules enforced by the plugin:
 | `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
 | `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
 | `form` | `team=first\|reserve\|youth` | `{today, team: {uid, name, kind}, players: [Form], concerns: [uid], atmosphere: {level, text}\|null}`; see below | main + polling |
-| `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation}`; see below | main + polling |
+| `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation, report}`; see below | main + polling |
 | `loans` | – | `{today, out: [Loan], intake: {date, days}}`; see below | main + polling |
+| `inbox` | `since=null` (`YYYY-MM-DD`), `tab=all\|unread`, `max=50` (1–200) | `{today, unread, items: [Item]}`; headless, no screen; see below | main + polling |
 | `ctx_check` | – | `{checked: int, mismatches: [{prop, expected: [ctx], game: [ctx]}]}`; startup check of the binding-context table (`Contexts.cs`) against `Bindings.GetHandler`; no channel opened; see "Binding contexts" | main |
 
 There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
@@ -215,7 +216,23 @@ the comp value once per comp uid). Opponent names: team `Name`; `opponent_format
 - `upcoming`: the next fixtures, date ascending, `date` ≥ `today`, deduplicated by (date, opponent), at most `n`;
   `upcoming[0]` equals `next` when both exist. Beyond the fifth fixture only league fixtures are known (cup ties after
   the fifth are missing).
-- No next fixture: `next: null`, `threat: null`, `opponent_formation: null`.
+- No next fixture: `next: null`, `threat: null`, `opponent_formation: null`, `report: null`.
+- `report`: the next opponent's `HasTeamReport` (context `TeamRequestingReport` = `Human.Team`) → bool: true when
+  the recruitment team has an opposition report on that team. Reading it does not request a report.
+
+### inbox
+
+Headless (no screen opened). `Human.HumanPortalFilteredMessages` with contexts `team`, `StringType` = `""`,
+`PortalMessagesTab` = `0` (`tab=all`) or `3` (`tab=unread`) → `NewsItemReference` values, newest first (the
+portal's window, about three weeks); `Human.NumberUnreadMessages` (context `team`) → `unread`. The first `max`
+elements are planted directly (no context) for `NewsItemId`, `Date`, `NewsItemTimeSent`, `NewsItemHasBeenRead`,
+`NewsItemIsImportant`, `MediaNewsCategory`, `NewsTitleString`, `NewsBodyString`.
+`Item = {id, date, time, read, important, category, title, body}`.
+- `id` is not monotonic (do not order by it); `category` = `MediaNewsCategory` (int, language-neutral; 0, 1, 2 seen).
+- `title`/`body`: localized, markup tags removed; `body` is cut to 600 characters.
+- `since`: items stop at the first one whose `date` is before `since` (the list is date-descending). A `since` after
+  every item, or an empty tab, gives `items: []` with `unread` still set.
+- Reading does not mark anything read. Timing: 75 items ≈ 1.6 s round trip.
 
 ### loans
 
