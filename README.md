@@ -68,7 +68,7 @@ The assistant can do a few things in the game, only through a plan you approve:
 | `shortlist.add` / `shortlist.remove` | add a player to, or take one off, the shortlist |
 | `scout.request_report` | ask one of your scouts for a report on a player |
 | `training.set_sessions` / `training.set_focus` | change sessions in the training calendar; set a player's individual focus |
-| `contract.open_renewal` / `contract.offer_renewal` | open renewal talks with your own player; send the prepared terms once |
+| `contract.open_renewal` / `contract.offer_renewal` | open renewal talks with your own player; send the terms you approved, once |
 
 ```bash
 fm plan create shortlist.add --arg uid=123456 --reason "winger cover"   # writes a plan, nothing happens yet

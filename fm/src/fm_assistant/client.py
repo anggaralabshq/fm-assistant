@@ -23,6 +23,7 @@ OP_TIMEOUTS = {"hello": 10, "diag": 5, "dev_reload": 30, "panels": 10, "ui_dump"
                **{op: 60 for op in ("act_staff_approach", "act_staff_offer", "act_shortlist_add", "act_shortlist_remove",
                                     "act_scout_request", "act_training_sessions", "act_training_focus",
                                     "act_contract_open", "act_contract_offer")},
+               "act_training_sessions": 125,   # plugin allows 120 s (up to 21 changes)
                "negotiation": 15}
 
 

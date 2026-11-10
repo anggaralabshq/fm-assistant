@@ -17,16 +17,24 @@ def _stop(plan: dict, status: str, code: str, detail: str, **extra) -> dict:
 
 
 def run(plan_id: str, client, hello: dict) -> dict:
-    plan = plans.load(plan_id)
-    if plan["status"] != "proposed":
-        raise ValueError(f"plan {plan_id} is {plan['status']}, only a proposed plan can be applied")
-    if hello.get("build_supported") is not True:
-        plan["status"] = "refused"
-        plans.update(plan)
-        return _stop(plan, "refused", "refused", f"actions are disabled on untested build {hello.get('game_build')}")
+    try:
+        plan = plans.load(plan_id)
+        if plan["status"] == "proposed" and hello.get("build_supported") is not True:
+            plan["status"] = "refused"
+            plans.update(plan)
+            return _stop(plan, "refused", "refused", f"actions are disabled on untested build {hello.get('game_build')}")
+        actions.check_plan([a["kind"] for a in plan["actions"]])
+        for a in plan["actions"]:          # the file on disk may have been edited since the approval box
+            if actions.validate(a["kind"], a["args"]) != a["args"]:
+                raise ValueError(f"plan {plan_id} action {a['kind']} args changed on disk")
+        plan = plans.claim(plan_id)
+    except ValueError as e:
+        audit.write({"plan_id": str(plan_id), "result": "bad-plan", "detail": str(e)})
+        raise
     try:
         bk = backup.make()
     except backup.BackupError as e:
+        plans.release(plan)
         return _stop(plan, "proposed", "backup-failed", str(e))
 
     APPLY_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)

@@ -1,4 +1,4 @@
-"""Plans: <PLANS_DIR>/<id>.json. Status: proposed, applied, partial, failed, refused."""
+"""Plans: <PLANS_DIR>/<id>.json. Status: proposed, applying, applied, partial, failed, refused."""
 import json
 import os
 import re
@@ -15,6 +15,7 @@ ID = re.compile(r"\d{8}-\d{6}-[0-9a-f]{4}")
 def create(acts: list, reason: str, summary: str, root=None) -> dict:
     if not acts:
         raise ValueError("a plan needs at least one action")
+    actions.check_plan([a.get("kind") for a in acts])
     items = []
     for a in acts:
         args = actions.validate(a.get("kind"), a.get("args", {}))
@@ -50,3 +51,25 @@ def list_plans(status: str | None = None, root=None) -> list:
     d = Path(root or PLANS_DIR)
     plans = [json.loads(f.read_text()) for f in sorted(d.glob("*.json"))] if d.is_dir() else []
     return [p for p in plans if status in (None, p["status"])]
+
+
+def claim(plan_id: str, root=None) -> dict:
+    """proposed -> applying, once: <id>.claim is created O_EXCL, so of two applies only one wins, and a run that was
+    killed leaves the plan applying (never proposed again)."""
+    plan = load(plan_id, root)
+    if plan["status"] != "proposed":
+        raise ValueError(f"plan {plan_id} is {plan['status']}, only a proposed plan can be applied")
+    try:
+        os.close(os.open(_path(plan_id, root).with_suffix(".claim"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+    except FileExistsError:
+        raise ValueError(f"plan {plan_id} is applying, only a proposed plan can be applied") from None
+    plan["status"] = "applying"
+    update(plan, root)
+    return plan
+
+
+def release(plan: dict, root=None) -> None:
+    """applying -> proposed when nothing was sent (backup failed)."""
+    plan["status"] = "proposed"
+    update(plan, root)
+    _path(plan["id"], root).with_suffix(".claim").unlink(missing_ok=True)

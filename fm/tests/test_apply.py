@@ -28,7 +28,7 @@ class Fake:
         f = apply.APPLY_DIR / tok
         self.token_seen.append((tok, json.loads(f.read_text()), f.stat().st_mode & 0o777))
         a = self.answers[len(self.calls) - 1] if isinstance(self.answers, list) else self.answers
-        if isinstance(a, Exception):
+        if isinstance(a, BaseException):
             raise a
         return a
 
@@ -159,3 +159,61 @@ def test_cli_apply_text_without_answer_and_reapply_error(monkeypatch, save):
     r = run("apply", p["id"])
     assert r.exit_code == 3 and "bad-plan" in run("--json", "apply", p["id"]).stdout
     assert "only a proposed plan" in r.stderr and "Unexpected data" not in r.stderr
+
+
+# ---- final review fixes
+
+def test_killed_apply_cannot_be_applied_again(save):
+    p = mkplan(("staff.offer", {"uid": 1, "wage": 100}))
+    with pytest.raises(KeyboardInterrupt):
+        apply.run(p["id"], Fake(KeyboardInterrupt()), HELLO)
+    assert plans.load(p["id"])["status"] == "applying"
+    c = Fake(OK)
+    with pytest.raises(ValueError, match="applying"):
+        apply.run(p["id"], c, HELLO)
+    assert c.calls == []
+    assert audit.tail(1)[0]["result"] == "bad-plan"
+
+
+def test_backup_failure_releases_the_claim():
+    p = mkplan(("shortlist.add", {"uid": 1}))
+    apply.run(p["id"], Fake(OK), HELLO)          # no save: backup fails
+    assert plans.load(p["id"])["status"] == "proposed"
+    (backup.GAMES_DIR / "career.fm").write_bytes(b"x")
+    assert apply.run(p["id"], Fake(OK), HELLO)["status"] == "applied"
+
+
+def test_unknown_plan_is_audited():
+    with pytest.raises(ValueError):
+        apply.run("20260101-000000-abcd", Fake(OK), HELLO)
+    assert audit.tail(1)[0] == {**audit.tail(1)[0], "plan_id": "20260101-000000-abcd", "result": "bad-plan"}
+
+
+def test_training_sessions_client_waits_longer_than_plugin():
+    from fm_assistant.client import OP_TIMEOUTS
+    assert OP_TIMEOUTS["act_training_sessions"] >= 125      # plugin allows 120 s for up to 21 changes
+
+
+@pytest.mark.parametrize("acts", [
+    [("staff.approach", {"uid": 1}), ("staff.offer", {"uid": 1, "wage": 5})],
+    [("staff.offer", {"uid": 1, "wage": 5}), ("staff.offer", {"uid": 2, "wage": 5})],
+    [("contract.open_renewal", {"uid": 1}), ("contract.offer_renewal", {"uid": 1, "wage": 5, "end_date": "2029-06-30"})],
+])
+def test_offer_must_be_alone_in_its_plan(acts):
+    with pytest.raises(ValueError, match="alone"):
+        mkplan(*acts)
+
+
+def test_renewal_offer_pins_approved_terms():
+    with pytest.raises(ValueError, match="missing"):
+        mkplan(("contract.offer_renewal", {"uid": 1}))
+    with pytest.raises(ValueError, match="end_date"):
+        mkplan(("contract.offer_renewal", {"uid": 1, "wage": 5, "end_date": "30-06-2029"}))
+    p = mkplan(("contract.offer_renewal", {"uid": 1, "wage": 5, "end_date": "2029-06-30"}))
+    assert "2029-06-30" in p["actions"][0]["describe"]
+
+
+def test_settings_ask_before_mcp_apply():
+    from pathlib import Path
+    s = json.loads((Path(__file__).parents[2] / "skills/fm-manager/settings.example.json").read_text())
+    assert {"mcp__fm-assistant__apply", "Bash(fm --json apply*)", "Bash(fm apply*)"} <= set(s["permissions"]["ask"])

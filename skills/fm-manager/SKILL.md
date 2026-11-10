@@ -116,7 +116,7 @@ Possible actions (nothing else; bids, sales, releases, tactics, bonuses/clauses/
 | Hire staff | `staff.approach` (uid), then `staff.offer` (uid, wage) | `club budget`, `staff search` |
 | Shortlist a player / take off | `shortlist.add` (uid, months 0/1/3/6/12) / `shortlist.remove` (uid) | `players search` (uid) |
 | Change training sessions | `training.set_sessions` (changes: [{date, slot, session_type}]) | `training show` |
-| Renew an own player's contract | `contract.open_renewal` (uid), then `contract.offer_renewal` (uid) | `squad contracts`, `squad watch` |
+| Renew an own player's contract | `contract.open_renewal` (uid), then `contract.offer_renewal` (uid, wage, end_date) | `squad contracts`, `squad watch` |
 
 Not offered here, so give manual steps: scout reports (`scout.request_report` needs the scout's uid, which no
 read shows) and individual training focus (option names are not readable).
@@ -137,10 +137,13 @@ Flow, every time:
    ```
 4. Run `fm --json apply <id>` only when the owner's next message says yes to that box. A request made before the
    box ("langsung aja", "tawar lagi") is not a yes: it means make the plan and show the box. Different numbers →
-   new plan, new box. Never apply an old plan id again; it refuses.
+   new plan, new box. Never apply an old plan id again; it refuses. An offer (`staff.offer`,
+   `contract.offer_renewal`) is always a plan of its own, made after the approach/open result was read.
 5. Report per action from the output: `status` (ok / failed / skipped), `answer`, and that `verified` is true.
-   `failed` → quote `error.detail`; later actions were skipped. `precondition` = nothing was sent. Partial → say
-   exactly which actions were done. Never say done without `status: ok`.
+   `failed` → quote `error.detail`; later actions were skipped. `precondition` = the action itself was not sent
+   (talks may still be open on screen). `timeout` / `unavailable` → it may have happened: ask the owner to check
+   the game, then re-read. Partial → say exactly which actions (and which training changes) were done. Never say
+   done without `status: ok`.
 
 Per kind:
 - Staff: `staff.approach` opens talks and returns `demand` (job group, `wage`, `end_date`) and
@@ -149,10 +152,12 @@ Per kind:
   `countered` with `counter` terms and `patience`. A counter is never answered automatically: quote it, give a new
   recommendation, new plan, new box.
 - Renewal: `contract.open_renewal` returns `demand` (`wage`, `loyalty_bonus`, `agent_fee`, `end_date`, `add_ons`
-  as name/value). Compare `wage` with the status's `advised_max` ("saran gaji untuk status X"). `offer_renewal`
-  sends those terms unchanged; other terms = manual steps. `pending` = the player answers after the date
-  advances (the owner presses Continue, never the assistant). `precondition` "promise differs" → the talks stay
-  open in the game for the owner.
+  as name/value; `agent_fee: null` = see the game). Compare `wage` with the status's `advised_max` ("saran gaji
+  untuk status X"). The `contract.offer_renewal` plan takes `wage` = `demand.wage.value` and `end_date` =
+  `demand.end_date`; it sends those terms unchanged and refuses if the screen now shows other terms. Other terms =
+  manual steps. `pending` = the player answers after the date advances (the owner presses Continue, never the
+  assistant). `precondition` "promise differs" / "other promises requested" → the talks stay open in the game
+  for the owner.
 - Training: `slot` 0–2 = session 1–3 of the day; `session_type` = the number at the same position in that day's
   `session_types` as its name in `sessions` (e.g. "Istirahat" next to 300). A name not seen in `training show` →
   manual step. Only dates in the shown month, not past days or match slots.

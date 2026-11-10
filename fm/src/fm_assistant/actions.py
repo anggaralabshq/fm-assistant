@@ -31,9 +31,20 @@ REGISTRY = {
     "training.set_focus": Kind("act_training_focus", {"uid": int, "type_row": int}, {},
                                lambda a: f"set individual focus of player {a['uid']} to row {a['type_row']}"),
     "contract.open_renewal": Kind("act_contract_open", {"uid": int}, {}, lambda a: f"open contract renewal talks with player {a['uid']}"),
-    "contract.offer_renewal": Kind("act_contract_offer", {"uid": int}, {},
-                                   lambda a: f"send the prepared renewal offer to player {a['uid']}"),
+    "contract.offer_renewal": Kind("act_contract_offer", {"uid": int, "wage": int, "end_date": str}, {},
+                                   lambda a: f"send the renewal offer to player {a['uid']}: wage {a['wage']}, "
+                                   f"until {a['end_date']} (refused if the terms on screen differ)"),
 }
+
+
+# One approval = one offer: an offer kind is the only action in its plan, so a counter-offer or a demand read in
+# the same run can never be answered under that approval.
+OFFERS = {"staff.offer", "contract.offer_renewal"}
+
+
+def check_plan(kinds: list) -> None:
+    if any(k in OFFERS for k in kinds) and len(kinds) > 1:
+        raise ValueError(f"{', '.join(sorted(OFFERS & set(kinds)))} must be alone in its plan (one approval = one offer)")
 
 
 def _is(v, t):
@@ -76,6 +87,11 @@ def validate(kind: str, args: dict) -> dict:
         raise ValueError(f"{kind}: wage must be > 0")
     if "type_row" in out and out["type_row"] < -1:
         raise ValueError(f"{kind}: type_row must be >= -1")
+    if "end_date" in out:
+        try:
+            date.fromisoformat(out["end_date"])
+        except ValueError:
+            raise ValueError(f"{kind}: end_date must be YYYY-MM-DD") from None
     if "changes" in out:
         if not 1 <= len(out["changes"]) <= 21:
             raise ValueError(f"{kind}: changes needs 1-21 items")

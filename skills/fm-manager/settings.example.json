@@ -27,6 +27,7 @@
       "Bash(fm --json log*)"
     ],
     "ask": [
+      "mcp__fm-assistant__apply",
       "Bash(fm --json apply*)",
       "Bash(fm apply*)"
     ],
