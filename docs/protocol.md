@@ -373,10 +373,10 @@ contract after promises).
 | `act_scout_request` | `uid`, `scout_uid`, `duration=week\|month\|full` | `{verified, answer: "pending"\|"already", before: {being_scouted}, after, performed}`; the scout must be one the action lists | ~10 s |
 | `act_staff_approach` | `uid` (non-player) | `{verified, negotiation, demand: {job, wage, end_date}}`; the prefilled terms are the demand | ~10–13 s |
 | `act_staff_offer` | `uid`, `wage` (base currency) | `{verified, offered: {wage, job, event}, answer, counter, patience, before, after}` | ~19 s |
-| `act_training_sessions` | `changes: [{date, slot (0–2), session_type}]` (1–21) | `{verified, changes: [{date, slot, before, after, target}]}` | ~5 s per change |
+| `act_training_sessions` | `changes: [{date, slot (0–2), session_type}]` (1–21) | `{verified, changes: [{date, slot, before, after, target}], error?: {code, detail}}` | ~5 s per change |
 | `act_training_focus` | `uid`, `type_row` (option value, `-1` = none) | `{verified, before: {type_row}, after, answer?}` | ~5–6 s |
-| `act_contract_open` | `uid` (own first-team player) | `{verified, promises: {playing_time}, demand, negotiation}` | ~6.5 s (2.7 s on open talks) |
-| `act_contract_offer` | `uid` | `{verified, offered: {wage, end_date, event}, answer, patience, before, after}` | ~4.5 s |
+| `act_contract_open` | `uid` (own first-team player) | `{verified, promises: {playing_time, count}, demand, negotiation}` | ~6.5 s (2.7 s on open talks) |
+| `act_contract_offer` | `uid`, `wage` (base currency), `end_date` (`YYYY-MM-DD`): the approved demand | `{verified, offered: {wage, end_date, event}, answer, patience, before, after}` | ~4.5 s |
 
 Op details:
 
@@ -389,20 +389,33 @@ Op details:
 - `act_training_sessions`: dates as `YYYY-MM-DD` within the month the training screen shows; past days, match slots
   and session types with no known name → `precondition`. Each change opens the slot's session card, checks the
   card's date and slot, picks the option by the game's own session name, and confirms; the final calendar must
-  show every target, else `verified` false. Session names (type → localized name) are learned from every calendar
+  show every target, else `verified` false. Errors found before the first click (bad args, the checks above) are
+  op errors. A change that fails once clicking started stops the run and is returned, not thrown: `verified`
+  false, `changes` = every change up to and including the failed one (`after` from the final calendar, so changes
+  confirmed before it show as applied; null when that read failed), `error` = the failure's `{code, detail}`; the
+  open session card is cancelled. Later changes are not attempted. Session names (type → localized name) are learned from every calendar
   read and kept in `~/.fm-assistant/training_names.json`, so a replaced type can be set back.
 - `act_training_focus` sets the first-team player's individual additional focus on `TeamIndividualTrainingTool`;
   the option must be one the game offers that player.
 - `act_contract_open`: performs offer contract on the profile (unless the talks are already on screen). At the
   promises stage the requested playing time (screen row `playing-time-promise`) must equal the player's current
   squad status (`FullContract.AgreedPlayingTime` display), else `precondition` "promise differs: <requested> …"
-  with the talks left open on screen for the owner. Equal → finalize promises (41), negotiate contract (140).
-  `promises.playing_time` is null when the talks were already past the promises. `demand = {wage, loyalty_bonus,
-  agent_fee, end_date, add_ons: [{name, value}]}`: money values are Money; `add_ons` are the session's
+  with the talks left open on screen for the owner. Finalize commits every promise on the stage, so any other
+  requested promise — a row of the stage's `future-playing-times-list` or `add-on-list` ("additional promises";
+  either list missing → `ui-element-missing`) — → `precondition` "other promises requested: <row texts>; talks left
+  open for the owner", nothing finalized. Only the playing time, equal → finalize promises (41), negotiate contract
+  (140). `promises.playing_time` / `promises.count` (promise rows on the stage, so 1) are null when the talks were
+  already past the promises. `demand = {wage, loyalty_bonus, agent_fee, agent_fee_note, end_date, add_ons: [{name,
+  value}]}`: `wage`, `loyalty_bonus` are Money; `agent_fee` is the text the screen's `agent-fee-term` combobox shows
+  (e.g. `Rp10Rb`; the headless `AgentFee` reads 0 against a shown fee, so it is not used), `agent_fee_note` the
+  row's secondary line (e.g. "no agent", localized), each null when not shown; `add_ons` are the session's
   `AddOnList` (bonuses and clauses in one list, game order) named headless, value as the screen shows it.
-- `act_contract_offer` needs the contract stage of uid on screen and not read-only; sends the terms as they stand
-  (finalize deal, 41). `answer`: `accepted` (the contract now ends on the offered date), `pending` (read-only: the
-  player decides later), `rejected` (patience 0 or talks closed), `countered` (terms rewritten).
+- `act_contract_offer` needs the contract stage of uid on screen and not read-only. `wage` and `end_date` are the
+  terms the owner approved (`act_contract_open`'s `demand.wage.value` and `demand.end_date`): when the session's
+  wage (within 1 base unit) or end date differ, or `changed_by_other_party` is set → `precondition` "terms differ
+  from the approved ones: …; nothing sent". Then sends the terms as they stand (finalize deal, 41). `answer`:
+  `accepted` (the contract's `FullContract.EndDate` now equals `end_date`; never when it is unreadable), `pending`
+  (read-only: the player decides later), `rejected` (patience 0 or talks closed), `countered` (terms rewritten).
 
 Negotiation = `{open, on_screen, stage, wage, job, end_date, board_max_wage, wage_over_board_max, patience: {status,
 value}, changed_by_other_party, read_only, key_info: [text]}`, read headless from `Person.ContractEditSession`

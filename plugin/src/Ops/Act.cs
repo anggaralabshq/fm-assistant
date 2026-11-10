@@ -961,8 +961,10 @@ internal static class Act
         catch { }
     }
 
-    /// {changes: [{date: YYYY-MM-DD, slot: 0-2, session_type}] (1-21), apply_token} -> {verified, changes: [{date, slot, before, after}]}.
-    /// Each slot goes through the game's session card (click the slot, pick the option, confirm).
+    /// {changes: [{date: YYYY-MM-DD, slot: 0-2, session_type}] (1-21), apply_token} -> {verified, changes: [{date, slot,
+    /// before, after, target}], error?}. Each slot goes through the game's session card (click the slot, pick the
+    /// option, confirm). A change that fails stops the run: `changes` then lists every change up to and including the
+    /// failed one (the earlier ones may be applied), `error` = {code, detail} of the failure, verified false.
     public static async Task<JsonNode> TrainingSessionsOp(JsonObject a, CancellationToken ct)
     {
         if (a["changes"] is not JsonArray arr || arr.Count < 1 || arr.Count > 21) throw new OpException("bad-request", "changes: 1-21 items required");
@@ -994,13 +996,18 @@ internal static class Act
                 throw new OpException("precondition", $"session type {type} appears nowhere on the calendar, so its option cannot be identified; set it in the game");
             plan.Add((date, slot, type, day, before, (string)cal.Days[day]["sessions"][slot]));
         }
+        // Up to here nothing was clicked: errors throw. From the first click on, a failure stops the run and is
+        // returned with the changes attempted so far, so the ones already confirmed stay visible.
+        JsonObject error = null;
+        var attempted = 0;
         foreach (var (date, slot, type, day, before, _) in plan)
         {
+            attempted++;
             if (before == type) continue;
-            var now = await ReadCalendar(ct);   // names shift after each change; click by the current backing name
-            var name = (string)now.Days[day]["sessions"][slot];
             try
             {
+                var now = await ReadCalendar(ct);   // names shift after each change; click by the current backing name
+                var name = (string)now.Days[day]["sessions"][slot];
                 await Reader.MainR(() => ClickSlot(day, slot, name), ct);
                 if (!await Until(() => Reader.Main(() => Ui.IsOpen(Card), ct), x => x, 4000, ct)) throw new OpException("ui-element-missing", $"{Card} did not open");
                 await Task.Delay(600, ct);
@@ -1013,22 +1020,32 @@ internal static class Act
                     throw new OpException("ui-element-missing", $"{Card} did not close {Environment.TickCount64 - t0} ms after confirm");
                 await Task.Delay(500, ct);
             }
+            catch (OpException e)
+            {
+                await CancelCard();
+                error = new JsonObject { ["code"] = e.Code, ["detail"] = e.Message };
+                break;
+            }
             catch
             {
                 await CancelCard();
                 throw;
             }
         }
-        var end = await ReadCalendar(ct);
+        Calendar end = null;
+        try { end = await ReadCalendar(ct); }
+        catch (OpException e) when (error != null) { error["detail"] = $"{error["detail"]}; calendar read-back failed: {e.Message}"; }
         var res = new JsonArray();
-        var ok = true;
-        foreach (var (date, slot, type, day, before, _) in plan)
+        var ok = error == null;
+        foreach (var (date, slot, type, day, before, _) in plan.Take(attempted))
         {
-            var after = end.Days[day]["session_types"][slot].Int();
+            var after = end?.Days[day]["session_types"][slot].Int();
             ok &= after == type;
             res.Add(new JsonObject { ["date"] = date, ["slot"] = slot, ["before"] = before, ["after"] = after, ["target"] = type });
         }
-        return new JsonObject { ["verified"] = ok, ["changes"] = res };
+        var o = new JsonObject { ["verified"] = ok, ["changes"] = res };
+        if (error != null) o["error"] = error;
+        return o;
     }
 
     private const string FocusTool = "TeamIndividualTrainingTool";
@@ -1221,6 +1238,52 @@ internal static class Act
     /// The requested playing-time promise as the screen shows it (the row's value under its label).
     private static string PromiseShown() { var t = RowTexts("playing-time-promise"); return t.Count >= 2 ? t[1] : null; }
 
+    /// Main thread. The agent-fee-term row as the screen shows it: (fee, note) = the text its combobox shows (not the
+    /// raw digits of the combobox's unity-text-input, not the -/+ steps) and its secondary-text line (e.g. "no agent"),
+    /// each null when not shown.
+    private static (string Fee, string Note) FeeShown()
+    {
+        var p = Ui.OpenPanels().Find(x => Ui.PanelId(x) == NegotiationPanel);
+        UnityEngine.UIElements.VisualElement row = null, box = null, note = null;
+        if (p != null) Ui.Walk(p, 0, n => { if (row == null && n.name == "agent-fee-term" && Ui.Visible(n)) row = n; });
+        if (row == null) return (null, null);
+        Ui.Walk(row, 0, n =>
+        {
+            if (box == null && n.name == "combobox" && Ui.Visible(n)) box = n;
+            if (note == null && n.name == "secondary-text" && Ui.Visible(n)) note = n;
+        });
+        string fee = null;
+        void Find(UnityEngine.UIElements.VisualElement n, int depth)
+        {
+            if (fee != null || n == null || depth > 40 || n.name == "unity-text-input" || !Ui.Visible(n)) return;
+            var t = Ui.OwnText(n);
+            if (!string.IsNullOrWhiteSpace(t) && t != "-" && t != "+") { fee = t.Trim(); return; }
+            for (var i = 0; i < n.childCount; i++) Find(n[i], depth + 1);
+        }
+        Find(box, 0);
+        return (fee, note == null ? null : Ui.OwnText(note));
+    }
+
+    private static readonly string[] OtherPromiseLists = { "future-playing-times-list", "add-on-list" };
+
+    /// Main thread. The promises stage's rows besides the playing-time promise: the backing rows of its future
+    /// playing-time list and its additional-promises list (element names), with the texts the rows show. A list
+    /// missing from the stage is an error (fail closed).
+    private static R<(int Count, List<string> Texts)> OtherPromises()
+    {
+        var ws = ListRead.Widgets(NegotiationPanel);
+        var count = 0;
+        var texts = new List<string>();
+        foreach (var name in OtherPromiseLists)
+        {
+            var w = ws.Where(x => x.name == name).ToList();
+            if (w.Count != 1) return R<(int, List<string>)>.Err("ui-element-missing", $"promises stage shows {w.Count} '{name}' lists");
+            count += ListRead.Count(w[0]);
+            texts.AddRange(RowTexts(name));
+        }
+        return (count, texts);
+    }
+
     /// The contract-stage terms the player asks for: the session's prefilled values, add-ons named headless
     /// (AddOnList.Name) with their value as the screen shows it.
     private static async Task<JsonObject> Demand(int uid, JsonObject neg, CancellationToken ct)
@@ -1228,14 +1291,16 @@ internal static class Act
         await using var scope = new ReadScope(ct);
         var p = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { "ContractEditSession" }, 2000, NegotiationCtx);
         var session = p["ContractEditSession"]?.Value ?? throw new OpException("binding-api-changed", "person ContractEditSession did not resolve");
-        var sp = await scope.ReadOne(() => session, new[] { "LoyaltyBonus", "AgentFee", "AddOnList" }, 3000, NegotiationCtx);
+        var sp = await scope.ReadOne(() => session, new[] { "LoyaltyBonus", "AddOnList" }, 3000, NegotiationCtx);
         var addOnList = sp["AddOnList"]?.Value;
         var elems = addOnList == null ? new List<TypedValue>() : await Reader.Main(() => Reader.ListElems(addOnList, 20), ct);
         var plants = new List<Plant> { sp };
         foreach (var e in elems) { var x = e; plants.Add(await scope.ReadOne(() => x, new[] { "Name" }, 2500, NegotiationCtx)); }
         var got = await scope.Collect(plants);
         var names = got.Skip(1).Select(o => Str(o["Name"])).ToList();
-        var (loyalty, fee, texts) = await Reader.Main(() => (Money.Of(got[0]["LoyaltyBonus"]), Money.Of(got[0]["AgentFee"]), RowTexts("add-on-list")), ct);
+        // The headless AgentFee does not match the screen (reads 0 against a shown fee): the fee is the screen's own
+        // text of the agent-fee-term row, null when the row is not readable.
+        var (loyalty, fee, texts) = await Reader.Main(() => (Money.Of(got[0]["LoyaltyBonus"]), FeeShown(), RowTexts("add-on-list")), ct);
         var addOns = new JsonArray();
         for (var i = 0; i < names.Count; i++)
         {
@@ -1246,7 +1311,7 @@ internal static class Act
         }
         return new JsonObject
         {
-            ["wage"] = neg["wage"].Copy(), ["loyalty_bonus"] = loyalty, ["agent_fee"] = fee, ["end_date"] = neg["end_date"].Copy(),
+            ["wage"] = neg["wage"].Copy(), ["loyalty_bonus"] = loyalty, ["agent_fee"] = fee.Fee, ["agent_fee_note"] = fee.Note, ["end_date"] = neg["end_date"].Copy(),
             ["add_ons"] = addOns,
         };
     }
@@ -1260,10 +1325,11 @@ internal static class Act
         }
     }
 
-    /// {uid, apply_token} -> {verified, promises: {playing_time}, demand, negotiation}: opens renewal talks with an own
-    /// first-team player (PersonOfferContract). At the promises stage the requested playing time must equal the
-    /// player's current squad status; then the promises are finalized and the contract stage opened. A differing
-    /// request stops with `precondition`, the talks left open on screen. Already-open talks for uid are reused.
+    /// {uid, apply_token} -> {verified, promises: {playing_time, count}, demand, negotiation}: opens renewal talks with
+    /// an own first-team player (PersonOfferContract). At the promises stage the requested playing time must equal the
+    /// player's current squad status and be the only promise (finalize commits them all); then the promises are
+    /// finalized and the contract stage opened. A differing or extra request stops with `precondition`, the talks
+    /// left open on screen. Already-open talks for uid are reused.
     public static async Task<JsonNode> ContractOpenOp(JsonObject a, CancellationToken ct)
     {
         var uid = Uid(a);
@@ -1280,12 +1346,18 @@ internal static class Act
         var stage = await Reader.Main(ScreenStage, ct);
         if (stage == null) throw new OpException("ui-element-missing", "the negotiation screen did not open");
         string requested = null;
+        int? promiseCount = null;
         if (stage == "promises")
         {
             requested = await Reader.Main(PromiseShown, ct);
             if (requested == null) throw new OpException("ui-element-missing", "playing-time promise row not readable");
             if (requested != display)
                 throw new OpException("precondition", $"promise differs: {requested} (current status {display}); the talks are left open on screen for the owner");
+            // Finalize commits every promise on the stage, so nothing but the playing time may be requested.
+            var (others, texts) = await Reader.MainR(OtherPromises, ct);
+            if (others > 0)
+                throw new OpException("precondition", $"other promises requested: {(texts.Count > 0 ? string.Join(" / ", texts) : $"{others} rows")}; talks left open for the owner");
+            promiseCount = 1;
             await Speak(uid, e => e == FinalizeEvent, ct, "PreContractPromisesEditSession");
             await SpeakWhenShown(uid, NegotiateContractEvent, "PreContractPromisesEditSession", ct);
             stage = await Until(() => Reader.Main(ScreenStage, ct), x => x == "contract", 8000, ct);
@@ -1295,7 +1367,7 @@ internal static class Act
         return new JsonObject
         {
             ["verified"] = stage == "contract" && (bool)neg["on_screen"] && !(bool)neg["read_only"],
-            ["promises"] = new JsonObject { ["playing_time"] = requested },
+            ["promises"] = new JsonObject { ["playing_time"] = requested, ["count"] = promiseCount },
             ["demand"] = await Demand(uid, neg, ct),
             ["negotiation"] = neg,
         };
@@ -1310,25 +1382,42 @@ internal static class Act
         return Str((await scope.Collect(new List<Plant> { cp }))[0]["EndDate"]);
     }
 
-    /// {uid, apply_token} -> {verified, offered, answer, patience, before, after}: sends the contract-stage terms as
-    /// they stand ("finalize deal") to an own player whose renewal talks are on screen (contract.open first).
+    /// {uid, wage (base currency), end_date (YYYY-MM-DD), apply_token} -> {verified, offered, answer, patience, before,
+    /// after}: sends the contract-stage terms as they stand ("finalize deal") to an own player whose renewal talks are
+    /// on screen (contract.open first). wage and end_date are the terms the owner approved (contract.open's demand);
+    /// the session must still hold exactly those, with no change by the player, else nothing is sent.
     /// answer: pending (read-only, the player thinks it over), accepted (the contract now ends on the offered date),
     /// rejected (patience gone or talks closed), countered (the player rewrote the terms).
     public static async Task<JsonNode> ContractOfferOp(JsonObject a, CancellationToken ct)
     {
         var uid = Uid(a);
+        var wage = Meta.Int(a, "wage", 0);
+        if (wage <= 0) throw new OpException("bad-request", "wage (positive base-currency integer, the approved demand) required");
+        var endDate = Meta.Str(a, "end_date", required: true);
+        if (!System.DateTime.TryParseExact(endDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _))
+            throw new OpException("bad-request", $"end_date must be YYYY-MM-DD: {endDate}");
         await Career(ct);
         if (!(await OwnStatus(uid, ct)).Own) throw new OpException("precondition", $"person {uid} is not in the first team");
         var before = await ReadNegotiation(uid, ct);
         if (!(bool)before["on_screen"] || Str(before["stage"]) != "contract")
             throw new OpException("precondition", "open the renewal first: the contract stage for this person is not on screen (contract.open)");
         if ((bool)before["read_only"]) throw new OpException("precondition", "negotiation is read-only (an offer is already pending)");
+        var diffs = new List<string>();
+        double? nowWage = before["wage"]?["value"] is JsonValue wv && wv.TryGetValue<double>(out var wd) ? wd : null;
+        var nowEnd = Str(before["end_date"]);
+        // the session's wage is a base-currency number that may carry a fraction; the approved value is its integer
+        if (nowWage == null || Math.Abs(nowWage.Value - wage) >= 1)
+            diffs.Add($"wage {nowWage?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unreadable"} (approved {wage})");
+        if (nowEnd != endDate) diffs.Add($"end date {nowEnd ?? "unreadable"} (approved {endDate})");
+        if ((bool)before["changed_by_other_party"]) diffs.Add("the player changed the terms");
+        if (diffs.Count > 0) throw new OpException("precondition", $"terms differ from the approved ones: {string.Join("; ", diffs)}; nothing sent");
         var ev = await Speak(uid, e => e == FinalizeEvent, ct);
         var after = await Until(() => ReadNegotiation(uid, ct), n => (bool)n["changed_by_other_party"] || (bool)n["read_only"]
             || (n["patience"]["status"].Int() ?? 0) != 0 || !(bool)n["on_screen"], 6000, ct);
         await Task.Delay(1000, ct);
         after = await ReadNegotiation(uid, ct);
-        var accepted = await ContractEnd(uid, ct) == Str(before["end_date"]);
+        var contractEnd = await ContractEnd(uid, ct);
+        var accepted = contractEnd != null && contractEnd == endDate;
         var answer = accepted ? "accepted" : (bool)after["read_only"] ? "pending"
             : (after["patience"]["value"].Int() ?? 1) <= 0 || !(bool)after["on_screen"] ? "rejected"
             : (bool)after["changed_by_other_party"] ? "countered" : "pending";
