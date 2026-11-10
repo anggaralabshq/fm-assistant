@@ -41,12 +41,13 @@ def test_argv_bool_flag():
     assert tool("players_search").argv_for({"affordable": False}) == ["players", "search"]
 
 
-def test_table_has_expected_tools_and_nothing_acting():
+def test_table_has_expected_tools_and_no_raw_game_access():
     names = {t.name for t in m.TOOLS}
     assert names == {"doctor", "game_status", "club_budget", "squad_list", "staff_search", "staff_slots",
                      "players_search", "training_show", "training_load", "staff_vacancies", "squad_watch",
                      "squad_depth", "players_targets", "briefing", "fixtures", "squad_contracts", "squad_form",
-                     "squad_loans", "inbox", "tactic", "squad_rotation", "trends"}
+                     "squad_loans", "inbox", "tactic", "squad_rotation", "trends", "propose", "plan_show",
+                     "apply", "log"}
     argvs = [set(t.argv) for t in m.TOOLS]
     assert not any(a & {"launch", "restart", "load-recent", "call"} for a in argvs)
 
@@ -95,3 +96,21 @@ def test_phase1d_tools():
     assert tool("squad_rotation").argv_for({"days": 10}) == ["squad", "rotation", "--days", "10"]
     assert tool("trends").argv_for({}) == ["trends"]
     assert "snapshot" not in {t.name for t in m.TOOLS}   # writes a file on its own: CLI only
+
+
+def test_action_tools_argv():
+    acts = [{"kind": "shortlist.add", "args": {"uid": 4}}]
+    assert tool("propose").argv_for({"actions": acts, "reason": "why", "summary": None}) == [
+        "plan", "create", "--actions", json.dumps(acts), "--reason", "why"]
+    assert tool("apply").argv_for({"plan_id": "20261110-101010-ab12"}) == ["apply", "20261110-101010-ab12"]
+    assert tool("plan_show").argv_for({"plan_id": "x"}) == ["plan", "show", "x"]
+    assert tool("log").argv_for({"n": 5}) == ["log", "--n", "5"]
+    assert tool("apply").timeout > 120 and tool("apply").acts and not tool("propose").acts
+
+
+def test_action_tool_descriptions():
+    import asyncio
+    tools = asyncio.run(m.build_server().list_tools())
+    d = {t.name: t.description for t in getattr(tools, "tools", tools)}
+    assert "Read-only" not in d["apply"] and "approved" in d["apply"] and "Read-only" not in d["propose"]
+    assert d["club_budget"].endswith("Read-only.")

@@ -2,10 +2,10 @@
 
 An assistant manager for Football Manager 27 on macOS (Apple Silicon, Steam). It reads your career from the
 running game and recommends staff to hire, players to scout, how your budget stands and how heavy your
-training load is. You decide; you click.
+training load is. You decide.
 
-**Status: read-only.** This release never changes anything in the game: no hiring, no bids, no training
-changes, no saving. Actions (each after your approval, with a save backup first) are planned for Phase 2.
+**Status:** reads everything below; a few actions (staff offers, shortlist, training sessions, contract renewals)
+run only after you approve a plan, with a save backup first. It never saves, bids, sells or changes tactics.
 
 ## How it works
 
@@ -29,7 +29,7 @@ language works.
 5. Optional, for Claude Code: copy `skills/fm-manager` into `~/.claude/skills/`, the files in its `commands/`
    into `~/.claude/commands/`, and merge `settings.example.json` into your settings.
 
-Back up your save folder before trying anything new; this release only reads, but the loader is third-party.
+Back up your save folder before trying anything new; the loader is third-party.
 
 ## Commands
 
@@ -58,10 +58,41 @@ Back up your save folder before trying anything new; this release only reads, bu
 
 Add `--json` before the command for machine output. `scripts/smoke.sh` runs all of them against the live game.
 
-## MCP server (read-only)
+## Actions (after approval)
 
-`fm-mcp` exposes the read commands as MCP tools over stdio (each tool runs `fm --json ...`; errors come back as
-`{"ok": false, "error": {...}}`). It has no tools that launch, restart, load or call anything in the game.
+The assistant can do a few things in the game, only through a plan you approve:
+
+| Kind | What it does |
+|---|---|
+| `staff.approach` / `staff.offer` | open contract talks with a staff member; send one offer at a wage up to the board's maximum |
+| `shortlist.add` / `shortlist.remove` | add a player to, or take one off, the shortlist |
+| `scout.request_report` | ask one of your scouts for a report on a player |
+| `training.set_sessions` / `training.set_focus` | change sessions in the training calendar; set a player's individual focus |
+| `contract.open_renewal` / `contract.offer_renewal` | open renewal talks with your own player; send the terms you approved, once |
+
+```bash
+fm plan create shortlist.add --arg uid=123456 --reason "winger cover"   # writes a plan, nothing happens yet
+fm plan show <id>
+fm apply <id>          # backs up the newest save, performs each action, reads the result back
+fm log --n 5           # audit log (~/.fm-assistant/log.jsonl)
+```
+
+- Only the kinds above exist; the plugin also checks a one-use token that only `fm apply` writes. It never accepts
+  bids, sells, releases, terminates contracts or changes tactics, and it never answers a counter-offer by itself.
+- Before acting, `fm apply` copies the newest save to `~/.fm-assistant/backups/<time>/` with a SHA-256. The game
+  holds the changes in memory until you save. **Rollback = load a save from before the change**; once you have
+  saved, the backup copy is the only way back (copy it over the save in the game's `games/` folder with the game
+  closed).
+- Actions refuse to run on an untested game build.
+- `settings.example.json` lets the skill write plans and read the log on its own, and asks you before every
+  `fm apply`.
+
+## MCP server
+
+Read tools plus `propose` (writes a plan), `plan_show`, `log` and `apply`. `apply` changes the game: the client
+must ask you before each call. There are no tools that launch, restart, load or call anything else in the game.
+
+`fm-mcp` runs over stdio; each tool runs `fm --json ...`, and errors come back as `{"ok": false, "error": {...}}`.
 
 ```bash
 cd fm && uv sync --extra mcp
@@ -88,6 +119,8 @@ properties the plugin reads; reads then fail with a clear error instead of guess
 - Staff wage demands are not readable outside the contract-offer screen; only current wages are shown.
 - Player search returns the Player Database's current filter.
 - The training view covers the month the Training screen shows.
+- Scout report requests and individual training focus exist in the plugin but the skill leaves them manual: no read
+  shows your scouts' ids or the focus option names yet.
 
 See `docs/protocol.md` for the plugin protocol and everything discovered about the game's data.
 

@@ -41,6 +41,8 @@ Rules enforced by the plugin:
 | `ui-element-missing` | an expected UI element was not found |
 | `main-thread-timeout` | the game's main thread did not run the job before its deadline |
 | `binding-api-changed` | a game API the plugin relies on is missing (likely a game update) |
+| `forbidden` | action op without a valid apply token, or on an untested game build (see "Actions") |
+| `precondition` | action op refused before anything was sent (wrong target, board limit, stage); detail says why |
 | `internal` | anything else; detail has the exception message |
 
 ## Ops
@@ -337,6 +339,92 @@ with the day headers (binding `day.DayOfTheMonth`, e.g. `31 Agu`, `1 Sep`, `2`) 
 `Day = {index, day_label, day_of_month, weekday, schedule, sessions[3], session_types[3], match}`; a match slot is
 `null` in `sessions`/`session_types`. The view is the month the screen shows (normally today's month), so days
 after its last week are not included.
+
+## Actions
+
+Action ops change the career (in memory; nothing is saved). They are gated:
+
+- Tested game build only (`hello.tested_builds`), else `forbidden` "actions are disabled on untested build X".
+- `apply_token`: 32 lowercase hex chars naming a file `~/.fm-assistant/apply/<token>` written by `fm apply`
+  (content `{"plan_id", "index", "kind"}`). The plugin consumes it before acting (rename to `.used`, read, delete),
+  so a token works once. Missing, malformed, unknown or reused token → `forbidden`. A token whose `kind` belongs to
+  another op → `forbidden` "apply token was written for <kind>, not <op>".
+- Kinds → ops: `staff.approach` `act_staff_approach`, `staff.offer` `act_staff_offer`, `shortlist.add`
+  `act_shortlist_add`, `shortlist.remove` `act_shortlist_remove`, `scout.request_report` `act_scout_request`,
+  `training.set_sessions` `act_training_sessions`, `training.set_focus` `act_training_focus`,
+  `contract.open_renewal` `act_contract_open`, `contract.offer_renewal` `act_contract_offer`.
+- Every action op holds the UI lock and needs a loaded career.
+
+Person actions run through the person's profile (opened like a person link; the op waits until the profile shows
+the uid). The action is an allow-listed `ActionEntry` of the profile's secondary tabs, performed with
+`PluginContextActionsModule.HandleActionEvent`; the entry's `ActionData` must name the target person, else
+`ui-element-missing`. Allow-list (action ids): approach to sign `1749837424`, offer contract `2000111204`, shortlist
+add `1097488485`, shortlist remove `1500280650`, assign scout `1363818831`. Entries that ask for confirmation get
+the game's `GenericModalDialog` primary button; on any error after the dialog opened it is cancelled.
+Negotiation buttons are the screen's speak-to buttons, clicked only when the button at the action's position shows
+that action's own title (`ContractEditSession.SpeakTo.Actions`, events: 20 propose, 41 finalize, 140 negotiate
+contract after promises).
+
+| op | args | result | timing |
+|---|---|---|---|
+| `negotiation` | `uid` | Negotiation (below); read-only, not gated | ~1.3 s |
+| `act_shortlist_add` | `uid`, `months=0` (0 = indefinite, 1, 3, 6, 12) | `{verified, before: {shortlisted, count}, after, performed, answer?}`; `answer: "already"` when nothing was needed | ~10 s |
+| `act_shortlist_remove` | `uid` | same shape; confirms the game's dialog | ~13 s |
+| `act_scout_request` | `uid`, `scout_uid`, `duration=week\|month\|full` | `{verified, answer: "pending"\|"already", before: {being_scouted}, after, performed}`; the scout must be one the action lists | ~10 s |
+| `act_staff_approach` | `uid` (non-player) | `{verified, negotiation, demand: {job, wage, end_date}}`; the prefilled terms are the demand | ~10–13 s |
+| `act_staff_offer` | `uid`, `wage` (base currency) | `{verified, offered: {wage, job, event}, answer, counter, patience, before, after}` | ~19 s |
+| `act_training_sessions` | `changes: [{date, slot (0–2), session_type}]` (1–21) | `{verified, changes: [{date, slot, before, after, target}], error?: {code, detail}}` | ~5 s per change |
+| `act_training_focus` | `uid`, `type_row` (option value, `-1` = none) | `{verified, before: {type_row}, after, answer?}` | ~5–6 s |
+| `act_contract_open` | `uid` (own first-team player) | `{verified, promises: {playing_time, count}, demand, negotiation}` | ~6.5 s (2.7 s on open talks) |
+| `act_contract_offer` | `uid`, `wage` (base currency), `end_date` (`YYYY-MM-DD`): the approved demand | `{verified, offered: {wage, end_date, event}, answer, patience, before, after}` | ~4.5 s |
+
+Op details:
+
+- `act_staff_offer` needs the person's negotiation on screen (`act_staff_approach` first) and not read-only. `wage`
+  above the board maximum → `precondition` "wage X exceeds the board maximum Y; nothing sent". The job stays as
+  prefilled; the wage is stepped with the screen's `-`/`+` to the largest step ≤ `wage`. One offer (propose, or
+  finalize when the terms equal the demand). `answer`: `accepted` (now employed by the human club), `rejected`
+  (patience 0, or the screen closed without read-only), `countered` (the reply rewrote the wage or the base terms;
+  `counter` has the new terms), `pending` (read-only). A counter is never answered.
+- `act_training_sessions`: dates as `YYYY-MM-DD` within the month the training screen shows; past days, match slots
+  and session types with no known name → `precondition`. Each change opens the slot's session card, checks the
+  card's date and slot, picks the option by the game's own session name, and confirms; the final calendar must
+  show every target, else `verified` false. Errors found before the first click (bad args, the checks above) are
+  op errors. A change that fails once clicking started stops the run and is returned, not thrown: `verified`
+  false, `changes` = every change up to and including the failed one (`after` from the final calendar, so changes
+  confirmed before it show as applied; null when that read failed), `error` = the failure's `{code, detail}`; the
+  open session card is cancelled. Later changes are not attempted. Session names (type → localized name) are learned from every calendar
+  read and kept in `~/.fm-assistant/training_names.json`, so a replaced type can be set back.
+- `act_training_focus` sets the first-team player's individual additional focus on `TeamIndividualTrainingTool`;
+  the option must be one the game offers that player.
+- `act_contract_open`: performs offer contract on the profile (unless the talks are already on screen). At the
+  promises stage the requested playing time (screen row `playing-time-promise`) must equal the player's current
+  squad status (`FullContract.AgreedPlayingTime` display), else `precondition` "promise differs: <requested> …"
+  with the talks left open on screen for the owner. Finalize commits every promise on the stage, so any other
+  requested promise — a row of the stage's `future-playing-times-list` or `add-on-list` ("additional promises";
+  either list missing → `ui-element-missing`) — → `precondition` "other promises requested: <row texts>; talks left
+  open for the owner", nothing finalized. Only the playing time, equal → finalize promises (41), negotiate contract
+  (140). `promises.playing_time` / `promises.count` (promise rows on the stage, so 1) are null when the talks were
+  already past the promises. `demand = {wage, loyalty_bonus, agent_fee, agent_fee_note, end_date, add_ons: [{name,
+  value}]}`: `wage`, `loyalty_bonus` are Money; `agent_fee` is the text the screen's `agent-fee-term` combobox shows
+  (e.g. `Rp10Rb`; the headless `AgentFee` reads 0 against a shown fee, so it is not used), `agent_fee_note` the
+  row's secondary line (e.g. "no agent", localized), each null when not shown; `add_ons` are the session's
+  `AddOnList` (bonuses and clauses in one list, game order) named headless, value as the screen shows it.
+- `act_contract_offer` needs the contract stage of uid on screen and not read-only. `wage` and `end_date` are the
+  terms the owner approved (`act_contract_open`'s `demand.wage.value` and `demand.end_date`): when the session's
+  wage (within 1 base unit) or end date differ, or `changed_by_other_party` is set → `precondition` "terms differ
+  from the approved ones: …; nothing sent". Then sends the terms as they stand (finalize deal, 41). `answer`:
+  `accepted` (the contract's `FullContract.EndDate` now equals `end_date`; never when it is unreadable), `pending`
+  (read-only: the player decides later), `rejected` (patience 0 or talks closed), `countered` (terms rewritten).
+
+Negotiation = `{open, on_screen, stage, wage, job, end_date, board_max_wage, wage_over_board_max, patience: {status,
+value}, changed_by_other_party, read_only, key_info: [text]}`, read headless from `Person.ContractEditSession`
+(contexts `human`, `BuyingClub`). The game computes a session for anyone (the terms it would offer), so `open` =
+the negotiation screen shows this person, or the session carries a reply (changed by the other party, patience
+status set, read-only). `stage` = `promises`/`contract` from the screen when on screen; off screen an open session
+is `contract`; null when not open. `job` = job group (`recruitment`/`coaching`/`medical`, null for players).
+`board_max_wage` = the largest step of the wage step list (above it the game disables `+` and sets
+`wage_over_board_max`). `end_date` = `YYYY-MM-DD`.
 
 ## Navigation routes (nav_open)
 

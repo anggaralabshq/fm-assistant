@@ -49,5 +49,15 @@ internal static class OpsEntry
         ["tree_probe"] = (DevOnly(Spike.TreeProbe), 10),
         ["profile_open"] = (DevOnly(Exclusive(Spike.ProfileOpen)), 20),
         ["team_panel_open"] = (DevOnly(Exclusive(Spike.TeamPanelOpen)), 20),
+        ["negotiation"] = (Act.Negotiation, 15),
+        ["act_shortlist_add"] = (Exclusive(Act.Gated("act_shortlist_add", Act.ShortlistAddOp)), 60),
+        ["act_shortlist_remove"] = (Exclusive(Act.Gated("act_shortlist_remove", Act.ShortlistRemoveOp)), 60),
+        ["act_staff_approach"] = (Exclusive(Act.Gated("act_staff_approach", Act.StaffApproachOp)), 60),
+        ["act_staff_offer"] = (Exclusive(Act.Gated("act_staff_offer", Act.StaffOfferOp)), 60),
+        ["act_scout_request"] = (Exclusive(Act.Gated("act_scout_request", Act.ScoutRequestOp)), 60),
+        ["act_contract_open"] = (Exclusive(Act.Gated("act_contract_open", Act.ContractOpenOp)), 60),
+        ["act_contract_offer"] = (Exclusive(Act.Gated("act_contract_offer", Act.ContractOfferOp)), 60),
+        ["act_training_focus"] = (Exclusive(Act.Gated("act_training_focus", Act.TrainingFocusOp)), 60),
+        ["act_training_sessions"] = (Exclusive(Act.Gated("act_training_sessions", Act.TrainingSessionsOp)), 120),
     };
 }

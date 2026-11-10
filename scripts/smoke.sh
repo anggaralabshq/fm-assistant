@@ -1,5 +1,5 @@
 #!/bin/bash
-# End-to-end smoke test against the running game: doctor, then every read command with --json.
+# End-to-end smoke test against the running game: doctor, then every read command with --json. Never applies a plan.
 # Prints one line per command; exits non-zero at the first failure.
 set -uo pipefail
 cd "$(dirname "$0")/../fm"
@@ -41,4 +41,6 @@ run tactic
 run squad rotation
 run snapshot
 run trends
+run plan list
+run log --n 1
 echo "smoke: all ok"

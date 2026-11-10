@@ -1,12 +1,12 @@
 ---
 name: fm-manager
-description: Use when the owner asks about their Football Manager 27 career — staff to hire or staff vacancies, players to scout or buy, thin positions, contracts, injuries, form, next opponent, loans, a session briefing, budget, squad fitness, training load — or runs /fm-staff-search, /fm-scout, /fm-training, /fm-vacancies, /fm-watch, /fm-depth, /fm-briefing.
+description: Use when the owner asks about their Football Manager 27 career — staff to hire or staff vacancies, players to scout or buy, thin positions, contracts, injuries, form, next opponent, loans, a session briefing, budget, squad fitness, training load — or asks to make an offer, shortlist a player, change training or renew a contract — or runs /fm-staff-search, /fm-scout, /fm-training, /fm-vacancies, /fm-watch, /fm-depth, /fm-briefing, /fm-apply.
 ---
 
 # FM Assistant Manager
 
-Read-only assistant for one FM27 career. Data comes only from `fm --json …`; the tool cannot change the game.
-Answer in Indonesian. Never tactics, never decide for the owner.
+Assistant for one FM27 career. Data comes only from `fm --json …`. It changes the game only through a plan the
+owner approved (see Actions). Answer in Indonesian. Never tactics, never decide for the owner.
 
 ## Every request
 
@@ -107,5 +107,61 @@ Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `phy
    REKRUTMEN → Database Pemain (players); LATIHAN (training); SKUAD → Kontrak (contracts); for fixtures,
    loans and form name the topic ("jadwal laga", "pemain pinjaman") rather than guessing a screen name. End with "kabari saya setelahnya, saya cek ulang".
 
-The owner says "langsung rekrut / ubah saja": reply that hiring, bidding and changing training are not
-available yet (actions come in a later version), then give step 5. Never write that something was done.
+## Actions (only after the owner's yes)
+
+Possible actions (nothing else; bids, sales, releases, tactics, bonuses/clauses/job edits stay manual steps):
+
+| Owner asks | Kind (args) | Facts first |
+|---|---|---|
+| Hire staff | `staff.approach` (uid), then `staff.offer` (uid, wage) | `club budget`, `staff search` |
+| Shortlist a player / take off | `shortlist.add` (uid, months 0/1/3/6/12) / `shortlist.remove` (uid) | `players search` (uid) |
+| Change training sessions | `training.set_sessions` (changes: [{date, slot, session_type}]) | `training show` |
+| Renew an own player's contract | `contract.open_renewal` (uid), then `contract.offer_renewal` (uid, wage, end_date) | `squad contracts`, `squad watch` |
+
+Not offered here, so give manual steps: scout reports (`scout.request_report` needs the scout's uid, which no
+read shows) and individual training focus (option names are not readable).
+
+Flow, every time:
+1. Read the facts, give the recommendation as usual.
+2. `fm --json plan create <kind> --arg k=v … --reason "<why>"` (several actions: `--actions '<json list>'`).
+   Writing a plan changes nothing in the game.
+3. Show the approval box, then stop. The plan's `describe` has uids only: write names and display money.
+   ```
+   **Perlu persetujuan** (plan <id>)
+   Aksi: <what, in words>
+   Target: <name> (uid <uid>)
+   Angka: <wage display / dates and sessions / months>
+   Alasan: <reason>
+   Backup otomatis sebelum apply; aksi sesudah save terakhir hanya bisa dibatalkan dengan load save.
+   Balas "ya" untuk menjalankan.
+   ```
+4. Run `fm --json apply <id>` only when the owner's next message says yes to that box. A request made before the
+   box ("langsung aja", "tawar lagi") is not a yes: it means make the plan and show the box. Different numbers →
+   new plan, new box. Never apply an old plan id again; it refuses. An offer (`staff.offer`,
+   `contract.offer_renewal`) is always a plan of its own, made after the approach/open result was read.
+5. Report per action from the output: `status` (ok / failed / skipped), `answer`, and that `verified` is true.
+   `failed` → quote `error.detail`; later actions were skipped. `precondition` = the action itself was not sent
+   (talks may still be open on screen). `timeout` / `unavailable` → it may have happened: ask the owner to check
+   the game, then re-read. Partial → say exactly which actions were done; a failed training action lists in `result.changes` the
+   changes already made (`after` = `target`). Never say
+   done without `status: ok`.
+
+Per kind:
+- Staff: `staff.approach` opens talks and returns `demand` (job group, `wage`, `end_date`) and
+  `negotiation.board_max_wage`. Then recommend a wage ≤ `board_max_wage` and make a `staff.offer` plan with
+  `wage` = the base-currency `value` (show the `display`). `answer`: `accepted`, `rejected`, `pending`, or
+  `countered` with `counter` terms and `patience`. A counter is never answered automatically: quote it, give a new
+  recommendation, new plan, new box.
+- Renewal: `contract.open_renewal` returns `demand` (`wage`, `loyalty_bonus`, `agent_fee`, `end_date`, `add_ons`
+  as name/value; `agent_fee` is the screen's text with `agent_fee_note` (e.g. "Tidak punya agen"), null = see the
+  game). Compare `wage` with the status's `advised_max` ("saran gaji
+  untuk status X"). The `contract.offer_renewal` plan takes `wage` = `demand.wage.value` and `end_date` =
+  `demand.end_date`; it sends those terms unchanged and refuses if the screen now shows other terms. Other terms =
+  manual steps. `pending` = the player answers after the date advances (the owner presses Continue, never the
+  assistant). `precondition` "promise differs" / "other promises requested" → the talks stay open in the game
+  for the owner.
+- Training: `slot` 0–2 = session 1–3 of the day; `session_type` = the number at the same position in that day's
+  `session_types` as its name in `sessions` (e.g. "Istirahat" next to 300). A name not seen in `training show` →
+  manual step. Only dates in the shown month, not past days or match slots.
+- Shortlist: `months` 0 (= tanpa batas waktu) unless the owner names a length. `answer: "already"` = it was
+  already so; nothing changed.
