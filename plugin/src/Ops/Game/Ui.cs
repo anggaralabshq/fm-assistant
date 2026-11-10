@@ -132,6 +132,20 @@ internal static class Ui
         return roots;
     }
 
+    /// BindingRemapper: {from -> to path} (where a cell's "binding.X" variable comes from). Discovery aid.
+    private static JsonObject Remaps(VisualElement n)
+    {
+        try
+        {
+            var r = n.TryCast<SI.Bindable.BindingRemapper>();
+            if (r == null || r.Mappings == null) return null;
+            var o = new JsonObject();
+            foreach (var m in r.Mappings) o[m.from ?? "?"] = m.to.Path;
+            return o;
+        }
+        catch (Exception e) { return new JsonObject { ["error"] = e.GetType().Name }; }
+    }
+
     private static JsonObject DumpNode(VisualElement n, int depth, ref int budget)
     {
         budget--;
@@ -139,6 +153,8 @@ internal static class Ui
         o["type"] = TypeName(n);
         var bind = BindPath(n);
         if (bind != null) o["bind"] = bind;
+        var remap = Remaps(n);
+        if (remap != null) o["remap"] = remap;
         if (depth > 0 && n.childCount > 0)
         {
             var kids = new JsonArray();

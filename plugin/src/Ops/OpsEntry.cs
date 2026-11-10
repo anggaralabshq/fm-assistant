@@ -19,5 +19,6 @@ internal static class OpsEntry
         ["club"] = (Club.Read, 30),
         ["squad"] = (Squad.Read, 90),
         ["staff_search"] = (Staff.Search, 90),
+        ["player_search"] = (Players.Search, 90),
     };
 }

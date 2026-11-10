@@ -28,9 +28,11 @@ internal static class Nav
         ["ClubScreen"] = null,
         ["StaffSearchReport"] = null,
         ["ClubAllStaffTool"] = null,
+        ["PlayerSearchReport"] = null,
     };
 
     private const string StaffTabGuid = "9ba550b513bf5144da547e7d87df80da";  // KLUB > Staf (ClubAllStaffTool)
+    private const string PlayerDbGuid = "bfe5117deac3c454f8970018733ac664";  // REKRUTMEN > Database Pemain
 
 
     /// Screens that need the game's own navigation (opened by clicking a primary tab by element name, then a
@@ -40,6 +42,7 @@ internal static class Nav
     {
         ["ClubAllStaffTool"] = ("ClubButton", "ClubScreen", StaffTabGuid, "ClubAllStaffTool", null),
         ["StaffSearchReport"] = ("ClubButton", "ClubScreen", StaffTabGuid, "ClubAllStaffTool", "StaffSearch"),
+        ["PlayerSearchReport"] = ("RecruitmentButton", "RecruitmentScreen", PlayerDbGuid, "PlayerSearchReport", null),
     };
 
     /// Dev discovery: GUIDs not mapped to a name yet may be opened while ~/.fm-assistant/dev-nav exists.
@@ -55,7 +58,7 @@ internal static class Nav
         return null;
     }
 
-    /// {"panel": id}, or dev-only {"guid": hex32} / {"subtab": hex32 of a visible secondary tab} -> {"panel", "open": true} / {"guid", "open_panels"}.
+    /// {"panel": id}, or dev-only {"guid": hex32} / {"subtab": hex32 of a visible secondary tab} / {"tab": MenuBar element name} -> {"panel", "open": true} / {"guid", "open_panels"}.
     public static async Task<JsonNode> Open(JsonObject a, CancellationToken ct)
     {
         var panel = Meta.Str(a, "panel");
@@ -68,12 +71,13 @@ internal static class Nav
             return new JsonObject { ["guid"] = guid, ["open_panels"] = await Reader.Main(Ui.OpenIds, ct) };
         }
         var subtab = Meta.Str(a, "subtab");
-        if (subtab != null)
+        var tab = Meta.Str(a, "tab");
+        if (subtab != null || tab != null)
         {
-            if (!DevGuids) throw new OpException("bad-request", "subtab clicks are dev-only");
-            await Reader.MainR(() => ClickSubtab(subtab), ct);
+            if (!DevGuids) throw new OpException("bad-request", "tab/subtab clicks are dev-only");
+            await Reader.MainR(() => tab != null ? ClickTab(tab) : ClickSubtab(subtab), ct);
             await Task.Delay(2500, ct);
-            return new JsonObject { ["subtab"] = subtab, ["open_panels"] = await Reader.Main(Ui.OpenIds, ct) };
+            return new JsonObject { ["clicked"] = tab ?? subtab, ["open_panels"] = await Reader.Main(Ui.OpenIds, ct) };
         }
         if (panel == null || !Allowed.ContainsKey(panel))
             throw new OpException("bad-request", $"panel must be one of {string.Join(", ", Allowed.Keys)}");

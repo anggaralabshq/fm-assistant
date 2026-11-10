@@ -56,12 +56,13 @@ Rules enforced by the plugin:
 | `tree` | `path=""`, `depth=2`, `max=400` | binding tree `{name, type, value, children}` | main |
 | `read` | `ref: person\|club\|team\|path`, `uid` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}` | decoded props; unresolved ones under `_missing` | main + polling |
 | `list_rows` | `panel`, `index=0`, `start=0`, `max=200` | `{panel, widgets: [{name, type, item_count, columns}], rows}`; backing data of list/table widgets (all rows, decoded) | main |
-| `nav_open` | `panel` (dev only while `~/.fm-assistant/dev-nav` exists: `guid`, or `subtab` = GUID of a visible secondary tab) | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`; `wrong-screen` if it did not open | main + waits |
+| `nav_open` | `panel` (dev only while `~/.fm-assistant/dev-nav` exists: `guid`, or `subtab` = GUID of a visible secondary tab) | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`, `PlayerSearchReport`; `wrong-screen` if it did not open | main + waits |
 | `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
 
 | `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots}`; see below | main + polling |
 | `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, count, players: [Player]}`; see below | main + polling |
 | `staff_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Staff]}`; opens `StaffSearchReport` itself | main + polling |
+| `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
 
 There is no generic click op. Discovery ops are read-only.
 
@@ -108,6 +109,20 @@ Wage demand: no person property found (`WageDemand`, `ExpectedWage`, `ContractDe
 `wage_demand` is always null; the demand only appears in the contract-offer flow (Phase 2).
 `Staff = {uid, name, age, club_uid, preferred_job, preferred_job_type, attributes, current_wage, wage_demand}`.
 
+### player_search
+
+Rows = every backing row of `PlayerSearchReport > playertable` (the screen's current filter; 689 rows ≈ 19 s).
+Person props: `Name`, `Age`, `Position`, `Club`, `ScoutRecommendation` (→ `scout_rating`), the 47 visible
+`Attribute*` names of `squad`, `FullContract` → `Wage` (display may be a range, `sort` = low end), `EndDate`,
+and `TransferValueRange` (`TransferValueRangeString` → `value.display`, `TransferValueRangeMaxValue` → `value.value`,
+`AskingPrice` (> 0 → `asking_price`), `ScoutingKnowledgeLevel` → `value_knowledge {level, max, text}`).
+Knowledge: headless attribute reads already apply the game's masking — `"-"` (unknown), `"6-10"` (range), int
+(known) — so the op returns what the manager may know. `value_knowledge` is the knowledge of the transfer value,
+not the table's knowledge column (whose source is not identified; it read "none" for players whose value
+knowledge was "known").
+`Prospect = {uid, name, age, position_mask, club_uid, value, asking_price, wage, contract_end, value_knowledge,
+scout_rating, attributes}`.
+
 ## Navigation routes (nav_open)
 
 Never by visible text (the owner's UI is Indonesian):
@@ -120,6 +135,10 @@ Never by visible text (the owner's UI is Indonesian):
    order and checked against the row's own `SubtabText`), then optionally a tile by element name.
    - `ClubAllStaffTool`: `ClubButton` → GUID `9ba550b513bf5144da547e7d87df80da`.
    - `StaffSearchReport`: as above, then tile `StaffSearch`.
+   - `PlayerSearchReport`: `RecruitmentButton` (opens `RecruitmentScreen`) → GUID `bfe5117deac3c454f8970018733ac664`
+     ("player database").
+   Primary tabs in `MenuBar`: `PortalButton`, `SquadButton`, `ClubTacticsButton`, `RecruitmentButton`,
+   `TrainingButton`, `ClubButton`.
    Opening these by GUID directly (`PanelManager.Open(AssetReferenceT<PanelID>)`) shows an empty panel (no context).
    Looking up Addressables keys from the resource locators crashed the game (SIGSEGV) — do not.
 
