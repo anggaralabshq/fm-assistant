@@ -106,6 +106,32 @@ internal static class Spike
         }, ct);
     }
 
+    /// {"panel": id, "max": 500} -> every visible text of an open panel at any depth: [{text, bind, name, x, y}]
+    /// (ui_dump stops at depth 40; the tactics pitch is deeper). Dev, read-only.
+    public static Task<JsonNode> UiTexts(JsonObject a, CancellationToken ct)
+    {
+        var panel = Meta.Str(a, "panel", required: true);
+        var max = Meta.Int(a, "max", 500, 1, 5000);
+        return Reader.MainR<JsonNode>(() =>
+        {
+            var arr = new JsonArray();
+            foreach (var p in Ui.OpenPanels())
+            {
+                if (Ui.PanelId(p) != panel) continue;
+                Ui.Walk(p, 0, n =>
+                {
+                    if (arr.Count >= max || !Ui.Visible(n)) return;
+                    var t = Ui.OwnText(n);
+                    if (t == null) return;
+                    var r = Ui.Row(n, t);
+                    r["bind"] = Ui.BindPath(n);
+                    arr.Add(r);
+                });
+            }
+            return arr;
+        }, ct);
+    }
+
     /// {"panel": id, "max": 20} -> star widgets of an open panel: bindings, unmapped (bound) and mapped (drawn) values.
     public static Task<JsonNode> StarsDump(JsonObject a, CancellationToken ct)
     {

@@ -57,6 +57,7 @@ Rules enforced by the plugin:
 | `read` | `ref: person\|club\|team\|path\|persons`, `uid` / `uids[]` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}`, `ctx: {name: {ref\|path\|int\|bool\|string, uid\|path\|value}}` (binding contexts, see phase 1d), `each: {listprop: [subprops]}`, `max_each=50`, `probe: [names]` | decoded props; unresolved ones under `_missing` | main + polling |
 | `ctx_probe` / `tree_probe` | `ref`/`path` + `props[]` / `names[]` | data handler + required binding contexts per name (no channel opened); dev only | main |
 | `team_panel_open` | `guid`, `param=team`, `team_uid` | opens a team-scoped screen with its team (`PanelManager.Open(PanelID, param, TeamReference)`; SquadScreen GUID `7957386accba7b44d81ac248d04efbac` + a youth team → `TeamSquadReport`); dev only, UI lock | main + waits |
+| `ui_texts` | `panel`, `max=500` | every visible text of an open panel at any depth `[{name, text, x, y, w, h, bind}]` (`ui_dump` stops at depth 40); dev only | main |
 | `stars_dump` / `stars_settings` | `panel`, `max` / – | star widgets of an open panel (bound vs drawn values) / the `FMStarRatingSettings` asset's youth and non-youth configurations; dev only | main |
 | `profile_info` / `profile_open` | – / `uid`, `kind=player\|nonplayer` | person-link handler's profile PanelIDs; opens a profile the way a person link does (dev only, UI lock) | main + waits |
 | `list_rows` | `panel`, `index=0`, `start=0`, `max=200` | `{panel, widgets: [{name, type, item_count, columns}], rows}`; backing data of list/table widgets (all rows, decoded) | main |
@@ -72,6 +73,7 @@ Rules enforced by the plugin:
 | `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation, report}`; see below | main + polling |
 | `loans` | – | `{today, out: [Loan], intake: {date, days}, warnings: [str]}`; see below | main + polling |
 | `inbox` | `since=null` (`YYYY-MM-DD`), `tab=all\|unread`, `max=50` (1–200) | `{today, unread, items: [Item]}`; headless, no screen; see below | main + polling |
+| `tactic` | – | `{name, mentality, slots: [Slot]}` (11 slots); first team's active tactic, headless, read-only; see below | main + polling |
 | `ctx_check` | – | `{checked: int, mismatches: [{prop, expected: [ctx], game: [ctx]}]}`; startup check of the binding-context table (`Contexts.cs`) against `Bindings.GetHandler`; no channel opened; see "Binding contexts" | main |
 
 There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
@@ -175,6 +177,40 @@ record `{MinValue, MaxValue, IsScoutsOpinion}` on a 0–20 scale, not raw abilit
   (`…-youth-true` / `…-youth-false`), not in numbers. **Values below 10 were not seen** in this save (35 own players,
   689 search rows, the U18 team is empty), so their display is unverified: keep them unmapped.
 - Timing: `squad` 30 players ≈ 3.1 s; `player_search` 689 rows ≈ 19.9 s; `loans` ≈ 2.2 s.
+
+### tactic
+
+Headless, read-only (no screen, nothing changed). `Human.Team.Tactic` (context `Boolean` = false) →
+`TeamTacticReference`; props `HasTactic`, `CurrentTacticSlot` (0-based; 0 seen), `TacticSlot1Name`…`TacticSlot3Name`
+(localized "mentality formation style"; null for an empty slot), `MentalityString` (localized),
+`TacticalPositionsCombined` (one record per slot: `TeamSelectionIndex` 0–10, `Player` person ref, `Position`,
+`IPPosition`, `OOPPosition`, `IPRole`, `OOPRole`, …). Per slot player: person `Name`, `TacticsRoleName` (context
+`team`; localized, the in-possession role as the screen's "IP role" column).
+`Slot = {index, position_mask, position_label, role, player: {uid, name}|null}`, exactly 11, in `TeamSelectionIndex`
+order (not the screen's top-to-bottom order). `name` = the current slot's `TacticSlot<n>Name`. A slot with no
+player: `player: null`, `role: null`; an index missing from the list: all fields null. `HasTactic` false →
+`{name: null, mentality: null, slots: []}`.
+- `position_mask` = the slot's `Position` (= `IPPosition`; `OOPPosition` can differ, e.g. AM (R) in possession,
+  M (R) out of it). It uses the **same bit scheme** as player `Position` (verified live: 11 slots of a 4-2-3-1 DM AM
+  wide), but central slots may carry a side modifier for a half-space: `0x100000` (left) / `0x200000` (right).
+  `positions.decode` renders those as `D (RC)` / `D (LC)` / `DM (R)` / `DM (L)`, while the tactics screen labels them
+  `D (C)` / `DM`. So use `position_label`, not `decode(position_mask)`.
+- `position_label`: the screen's slot label, from the mask with the modifiers removed:
+
+  | bit | label | bit | label |
+  |---|---|---|---|
+  | 1 | GK | 512 | M (L) |
+  | 4 | D (R) | 1024 | M (C) |
+  | 8 | D (L) | 2048 | AM (R) |
+  | 16 (+0x100000/0x200000) | D (C) | 4096 | AM (L) |
+  | 32 | WB (R) | 8192 | AM (C) |
+  | 64 | WB (L) | 16384, 32768, 65536 | ST (C) |
+  | 128 (+0x100000/0x200000) | DM | | |
+  | 256 | M (R) | | |
+
+  Every label is one of `fm_assistant.positions.SLOTS`; a mask with none or several of these bits → null. Live check
+  (tactics screen `TacticalPlannerTool`, column `StartingXI`): all 11 labels equal the screen's, including the four
+  half-space slots (two `D (C)`, two `DM`). Timing ≈ 1.7 s round trip.
 
 ### staff_search
 
@@ -334,6 +370,9 @@ Never by visible text (the owner's UI is Indonesian):
   thread only (one launch got no RepaintPanels prefix calls at all).
 
 ## Discovery notes (phase 1d)
+
+- Never run il2cpp reflection `FieldInfo.GetValue` over a UI element's fields (tried on an `FMStarRatingTemp`
+  widget): the game died (native crash). `stars_settings` reads only the `FMStarRatingSettings` ScriptableObject.
 
 Details: `docs/discovery/2026-11-10-phase1d.md`.
 - "Context-bound" props need named binding contexts (`Bindings.GetHandler`'s `outRequiredContext`, e.g. `team` +
