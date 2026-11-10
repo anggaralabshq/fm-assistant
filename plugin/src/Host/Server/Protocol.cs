@@ -31,17 +31,13 @@ internal delegate Task<JsonNode> OpHandler(JsonObject args, CancellationToken ct
 
 internal static class OpRegistry
 {
-    /// name -> (handler, timeout). Every handler is async; main-thread work hops through Reader.Main.
-    public static readonly Dictionary<string, (OpHandler Handler, int TimeoutSeconds)> Ops = new()
-    {
-        ["hello"] = (Meta.Hello, 10),
-        ["diag"] = (Meta.Diag, 5),
-        ["panels"] = (Meta.Panels, 10),
-        ["ui_dump"] = (Meta.UiDump, 10),
-        ["prop_check"] = (Meta.PropCheck, 10),
-        ["tree"] = (Meta.Tree, 10),
-        ["read"] = (Meta.Read, 60),
-        ["load_recent_save"] = (GameOps.LoadRecentSave, 10),
-    };
+    /// name -> (handler, timeout). Host ops (diag, dev_reload) plus whatever the loaded ops assembly registers.
+    /// Replaced as a whole on reload; readers take one reference per request.
+    public static volatile Dictionary<string, (OpHandler Handler, int TimeoutSeconds)> Ops = HostOps();
 
+    public static Dictionary<string, (OpHandler Handler, int TimeoutSeconds)> HostOps() => new()
+    {
+        ["diag"] = (OpsLoader.Diag, 5),
+        ["dev_reload"] = (OpsLoader.Reload, 30),
+    };
 }

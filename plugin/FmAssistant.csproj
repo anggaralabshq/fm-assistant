@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- FM Assistant plugin. Reference list modeled on redznn/fm-dof-mcp (MIT). -->
+  <!-- FM Assistant host plugin (BepInEx entry, server, tick, ops loader). Reference list modeled on redznn/fm-dof-mcp (MIT). -->
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>FmAssistant</AssemblyName>
@@ -10,7 +10,11 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/Host/**/*.cs" />
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="BepInEx.Core"><HintPath>$(CoreDir)/BepInEx.Core.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="BepInEx.Unity.Common"><HintPath>$(CoreDir)/BepInEx.Unity.Common.dll</HintPath><Private>false</Private></Reference>
@@ -28,6 +32,8 @@
     <Reference Include="SI.UI"><HintPath>$(InteropDir)/SI.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(InteropDir)/UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="FM.UI"><HintPath>$(InteropDir)/FM.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.Addressables"><HintPath>$(InteropDir)/Unity.Addressables.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.ResourceManager"><HintPath>$(InteropDir)/Unity.ResourceManager.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="FM.GamePlugin"><HintPath>$(InteropDir)/FM.GamePlugin.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>

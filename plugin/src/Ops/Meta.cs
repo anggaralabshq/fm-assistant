@@ -49,15 +49,6 @@ internal static class Meta
         };
     }
 
-    /// Answered on the WS thread (no main-thread hop): is the tick running?
-    public static Task<JsonNode> Diag(JsonObject a, CancellationToken ct) => Task.FromResult<JsonNode>(new JsonObject
-    {
-        ["ticks"] = Interlocked.Read(ref Plugin.Ticks),
-        ["last_tick_ms_ago"] = Plugin.Ticks == 0 ? null : Environment.TickCount64 - Plugin.LastTickMs,
-        ["queued"] = Plugin.Queue.Count,
-        ["bindings_captured"] = Plugin.Bindings != null,
-    });
-
     public static Task<JsonNode> Panels(JsonObject a, CancellationToken ct) =>
         Reader.Main<JsonNode>(Ui.Panels, ct, needBindings: false);
 
@@ -68,6 +59,28 @@ internal static class Meta
         var depth = Int(a, "depth", 12, 0, 40);
         var max = Int(a, "max", 400, 1, 5000);
         return Reader.MainR(() => Ui.Dump(panel, depth, max), ct, needBindings: false);
+    }
+
+    /// {"panel": id, "index": 0, "start": 0, "max": 200} -> {panel, widgets: [{name, type, item_count, columns}], rows: [...]}.
+    /// Read-only discovery of list/table backing data (all rows, not only the rendered ones).
+    public static Task<JsonNode> ListRows(JsonObject a, CancellationToken ct)
+    {
+        var panel = Str(a, "panel", required: true);
+        var index = Int(a, "index", 0, 0);
+        var start = Int(a, "start", 0, 0);
+        var max = Int(a, "max", 200, 1, 1000);
+        return Reader.MainR<JsonNode>(() =>
+        {
+            var ws = ListRead.Widgets(panel);
+            if (ws.Count == 0) return R<JsonNode>.Err("wrong-screen", $"expected {panel} with a list, open: {Ui.OpenIds()}");
+            var meta = new JsonArray();
+            foreach (var w in ws)
+            {
+                string type = "?"; try { type = w.GetIl2CppType().Name; } catch { }
+                meta.Add(new JsonObject { ["name"] = w.name, ["type"] = type, ["item_count"] = ListRead.Count(w), ["columns"] = ListRead.Columns(w) });
+            }
+            return new JsonObject { ["panel"] = panel, ["widgets"] = meta, ["rows"] = ListRead.Rows(ws[Math.Min(index, ws.Count - 1)], max, start) };
+        }, ct);
     }
 
     /// {"names": [...]} -> {"<name>": id or 0}. 0 = unknown property name in this build.

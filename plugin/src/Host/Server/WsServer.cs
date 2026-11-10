@@ -129,7 +129,7 @@ internal sealed class WsServer
                 case OpException oe: return Error(id, oe.Code, oe.Message);
                 case OperationCanceledException: return Error(id, "main-thread-timeout", $"{op} did not finish within {entry.TimeoutSeconds}s");
                 default:
-                    Plugin.L.LogError($"{op}: {inner}");
+                    Plugin.L.LogError($"{op}: {inner.GetType().Name}: {inner.Message}");  // no stack traces anywhere (see MainThreadQueue)
                     return Error(id, "internal", $"{inner.GetType().Name}: {inner.Message}");
             }
         }

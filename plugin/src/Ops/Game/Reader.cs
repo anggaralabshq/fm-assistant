@@ -81,8 +81,8 @@ internal static class Reader
 {
     public const int PollMs = 150;
     private const int HopTimeoutMs = 10000;
-    private static int _counter;
-    internal static Il2CppSystem.Object Owner;   // created on the main thread at bindings capture
+    // Seeded so node names from a reloaded ops assembly never collide with an earlier load's.
+    private static int _counter = Environment.TickCount & 0x3fffffff;
 
     /// Run f on the main thread; errors come back as values and are thrown here, on the calling (WS) thread.
     public static async Task<T> MainR<T>(Func<R<T>> f, CancellationToken ct, bool needBindings = true)
@@ -128,7 +128,7 @@ internal static class Reader
             prop.Key = Native.CreateRooted(b, plant.ParentKey, name, Bindings.NodeFlags.RequiresContext);
             prop.Managed = (k, v) => { if (Landed(v)) prop.Value = v; };
             prop.Cb = DelegateSupport.ConvertDelegate<Bindings.ValueChangedCallback>(prop.Managed);
-            b.Bind(ref prop.Key, Owner, prop.Cb);
+            b.Bind(ref prop.Key, Plugin.BindOwner, prop.Cb);
             prop.Bound = true;
         }
         // Children first, then the parent value, so the dirty walk sees children that need data.
@@ -189,7 +189,6 @@ internal static class Reader
         return true;
     }
 
-    private static readonly string[] RecordProbe = { "JobString", "Name", "Text", "Value", "Job", "Role" };
     private static readonly System.Text.RegularExpressions.Regex Numeric =
         new System.Text.RegularExpressions.Regex(@"^-?\d+(\.\d+)?[fmd]?$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -213,7 +212,7 @@ internal static class Reader
             try { return FM.GamePlugin.GameDate.ToDateTime(FM.UI.VisualFunctions.GameDateFunctions.GetGameDate(v)).ToString("yyyy-MM-dd"); }
             catch { }
         }
-        if (depth < 3)
+        if (depth < 6)
         {
             try
             {
@@ -227,10 +226,17 @@ internal static class Reader
                         if (rec.TryGetValue(Id("SortValue"), out var sv) && sv != null) node["sort"] = Decode(sv, depth + 1);
                         return node;
                     }
-                    // Unknown record shape: probe a few common keys (TryGetValue only, never enumerate).
-                    var probed = new JsonObject { ["$record"] = type, ["count"] = rec.Count };
-                    foreach (var k in RecordProbe)
-                        if (rec.TryGetValue(Id(k), out var kv) && kv != null) probed[k] = Decode(kv, depth + 1);
+                    // Unknown record shape: copy the key ids out (no enumerator), name them, decode each value.
+                    var probed = new JsonObject { ["$record"] = type };
+                    var n = Math.Min(rec.Count, 40);
+                    var ids = new Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<uint>(rec.Count);
+                    rec.Keys.CopyTo(ids, 0);
+                    for (var i = 0; i < n; i++)
+                    {
+                        string name;
+                        try { name = PropertyIdentifierSet.Instance.GetInfo(ids[i])?.Name ?? $"#{ids[i]}"; } catch { name = $"#{ids[i]}"; }
+                        if (rec.TryGetValue(ids[i], out var kv) && kv != null) probed[name] = Decode(kv, depth + 1);
+                    }
                     return probed;
                 }
             }

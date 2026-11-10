@@ -28,7 +28,7 @@ internal sealed class MainThreadQueue
                 try { r = job(); }
                 catch (Exception e)
                 {
-                    Plugin.L.LogError($"main-thread job: {e}");
+                    Plugin.L.LogError($"main-thread job: {e.GetType().Name}: {e.Message}");  // never e.ToString() here: capturing a stack trace through IL2CPP frames crashes CoreCLR (libunwind)
                     r = R<T>.Err("internal", $"{e.GetType().Name}: {e.Message}");
                 }
                 tcs.TrySetResult(r);
