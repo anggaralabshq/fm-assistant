@@ -56,3 +56,10 @@ def test_briefing_survives_bad_data_in_one_part():
     assert b["injuries"] and b["vacancies_open"] == 5
     t = briefing.text(b)
     assert "injured:" in t
+
+
+def test_briefing_concerns_include_unhappy():
+    b = briefing.build(parts())
+    names = {p["name"] for p in b["concerns"]}
+    assert names == {"Cakra Nugraha", "Budi Santoso"}   # Cakra: game concern; Budi: unhappy with playing time
+    assert len(b["concerns"]) == len(names)

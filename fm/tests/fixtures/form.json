@@ -1,20 +1,173 @@
 {
-  "today": "2026-09-14",
-  "team": "first",
-  "players": [
-    {"uid": 1, "name": "Anto Wijaya",
-     "season": [{"competition": "Liga Satu", "apps": 4, "starts": 4, "subs": 0, "rating": 7.2},
-                {"competition": "Piala Nusa", "apps": 2, "starts": 0, "subs": 2, "rating": 6.0}],
-     "last5": {"rating": 7.0, "valid": true, "minutes": [90, 90, null, 90, 63]}},
-    {"uid": 2, "name": "Budi Santoso",
-     "season": [{"competition": "Liga Satu", "apps": 5, "starts": 5, "subs": 0, "rating": 6.1}],
-     "last5": {"rating": 6.1, "valid": true, "minutes": [90, 90, 90, 90, 90]}},
-    {"uid": 3, "name": "Cakra Nugraha", "season": [],
-     "last5": {"rating": 0.0, "valid": false, "minutes": []}},
-    {"uid": 4, "name": "Dewa Pratama",
-     "season": [{"competition": null, "apps": 0, "starts": 0, "subs": 0, "rating": 0.0}],
-     "last5": {"rating": 0.0, "valid": false, "minutes": []}}
-  ],
-  "concerns": [3],
-  "atmosphere": {"level": 4, "text": "Penuh semangat"}
+ "today": "2026-09-14",
+ "team": "first",
+ "players": [
+  {
+   "uid": 1,
+   "name": "Anto Wijaya",
+   "season": [
+    {
+     "competition": "Liga Satu",
+     "apps": 4,
+     "starts": 4,
+     "subs": 0,
+     "rating": 7.2
+    },
+    {
+     "competition": "Piala Nusa",
+     "apps": 2,
+     "starts": 0,
+     "subs": 2,
+     "rating": 6.0
+    }
+   ],
+   "last5": {
+    "rating": 7.0,
+    "valid": true,
+    "minutes": [
+     90,
+     90,
+     null,
+     90,
+     63
+    ]
+   },
+   "morale": {
+    "value": 12,
+    "text": "Sangat baik"
+   },
+   "happiness": {
+    "playing_time": {
+     "severity": 0,
+     "change": 0,
+     "text": "<playing_time>"
+    },
+    "club": {
+     "severity": 0,
+     "change": 0,
+     "text": "<club>"
+    },
+    "management": {
+     "severity": 0,
+     "change": 0,
+     "text": "<management>"
+    },
+    "training": {
+     "severity": 0,
+     "change": 0,
+     "text": "<training>"
+    }
+   }
+  },
+  {
+   "uid": 2,
+   "name": "Budi Santoso",
+   "season": [
+    {
+     "competition": "Liga Satu",
+     "apps": 5,
+     "starts": 5,
+     "subs": 0,
+     "rating": 6.1
+    }
+   ],
+   "last5": {
+    "rating": 6.1,
+    "valid": true,
+    "minutes": [
+     90,
+     90,
+     90,
+     90,
+     90
+    ]
+   },
+   "morale": {
+    "value": 6,
+    "text": "Buruk"
+   },
+   "happiness": {
+    "playing_time": {
+     "severity": 4,
+     "change": 0,
+     "text": "<playing_time>"
+    },
+    "club": {
+     "severity": 0,
+     "change": 0,
+     "text": "<club>"
+    },
+    "management": {
+     "severity": 0,
+     "change": 0,
+     "text": "<management>"
+    },
+    "training": {
+     "severity": 1,
+     "change": 0,
+     "text": "<training>"
+    }
+   }
+  },
+  {
+   "uid": 3,
+   "name": "Cakra Nugraha",
+   "season": [],
+   "last5": {
+    "rating": 0.0,
+    "valid": false,
+    "minutes": []
+   },
+   "morale": null,
+   "happiness": null
+  },
+  {
+   "uid": 4,
+   "name": "Dewa Pratama",
+   "season": [
+    {
+     "competition": null,
+     "apps": 0,
+     "starts": 0,
+     "subs": 0,
+     "rating": 0.0
+    }
+   ],
+   "last5": {
+    "rating": 0.0,
+    "valid": false,
+    "minutes": []
+   },
+   "morale": null,
+   "happiness": {
+    "playing_time": {
+     "severity": 0,
+     "change": 0,
+     "text": "<playing_time>"
+    },
+    "club": {
+     "severity": 0,
+     "change": 0,
+     "text": "<club>"
+    },
+    "management": {
+     "severity": 0,
+     "change": 0,
+     "text": "<management>"
+    },
+    "training": {
+     "severity": 0,
+     "change": 0,
+     "text": "<training>"
+    }
+   }
+  }
+ ],
+ "concerns": [
+  3
+ ],
+ "atmosphere": {
+  "level": 4,
+  "text": "Penuh semangat"
+ }
 }

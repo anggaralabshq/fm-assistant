@@ -309,10 +309,12 @@ def squad_form(st, team):
         return ", ".join(r["name"] for r in fl[key]) or "none"
 
     text = (table([[r["name"], r["apps"], rate(r["rating"]), rate(r["last5_rating"], "-"), r["last5_minutes"],
-                    "yes" if r["concern"] else ""] for r in rows],
-                  ["name", "apps", "rating", "last 5", "last 5 min", "concern"])
+                    "-" if r["morale"] is None else f"{r['morale']} {r['morale_text'] or ''}".strip(),
+                    ", ".join(r["unhappy"]), "yes" if r["concern"] else ""] for r in rows],
+                  ["name", "apps", "rating", "last 5", "last 5 min", "morale", "unhappy with", "concern"])
             + f"\n\nLow form (last 5 under {form_mod.LOW_FORM}): {names('low_form')}"
             + f"\nUnused (no appearances): {names('unused')}"
+            + f"\nUnhappy: {names('unhappy')}"
             + f"\nConcerns: {names('concerns')}"
             + f"\nClub atmosphere: {(f.get('atmosphere') or {}).get('text') or '?'}")
     emit(st, {"today": f["today"], "team": f["team"], "players": rows, "flags": fl,

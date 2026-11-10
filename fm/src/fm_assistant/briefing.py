@@ -54,7 +54,9 @@ def build(parts: dict) -> dict:
     def form_part():
         if _ok(fo):
             fl = form_mod.flags(form_mod.summary(fo))
-            b["concerns"], b["low_form"] = fl["concerns"], fl["low_form"]
+            seen = {r["uid"] for r in fl["concerns"]}
+            b["concerns"] = fl["concerns"] + [r for r in fl["unhappy"] if r["uid"] not in seen]
+            b["low_form"] = fl["low_form"]
         else:
             b["concerns"] = b["low_form"] = fo or {"error": "missing"}
 

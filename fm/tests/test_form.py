@@ -25,7 +25,7 @@ def test_form_no_matches_is_null_not_zero():
     # early season: every counter 0, last five invalid -> "no matches yet", never a 0.0 rating
     rows = form.summary(doc(F(1, [S(0, 0.0, None)]), F(2)))
     assert [(r["apps"], r["rating"], r["last5_rating"], r["last5_minutes"]) for r in rows] == [(0, None, None, None)] * 2
-    assert form.flags(rows) == {"low_form": [], "unused": [], "concerns": []}
+    assert form.flags(rows) == {"low_form": [], "unused": [], "concerns": [], "unhappy": []}
 
 
 def test_rating_apps_weighted_over_competitions():
@@ -86,3 +86,47 @@ def test_last5_rating_rounded_to_two_decimals():
     f = {"players": [{"uid": 1, "name": "Budi Santoso", "season": [{"competition": None, "apps": 4, "starts": 4, "subs": 0, "rating": 6.52499961853027}],
                       "last5": {"rating": 6.52499961853027, "valid": True, "minutes": [90, 90]}}], "concerns": []}
     assert form.summary(f)[0]["last5_rating"] == 6.52
+
+
+def M(value=10, text="Baik"):
+    return {"value": value, "text": text}
+
+
+def H(pt=0, club=0, mgmt=0, tr=0):
+    return {k: {"severity": v, "change": 0, "text": f"teks {k}"}
+            for k, v in (("playing_time", pt), ("club", club), ("management", mgmt), ("training", tr))}
+
+
+def test_morale_missing_is_null():
+    # visible player (happiness present) but no Morale value: null, never 0
+    p = {**F(1), "morale": None, "happiness": H()}
+    q = {**F(2), "morale": {"value": None, "text": None}, "happiness": H()}
+    r = {**F(3)}  # op older than 1d: keys absent
+    rows = form.summary(doc(p, q, r))
+    assert [(x["morale"], x["morale_text"]) for x in rows] == [(None, None)] * 3
+
+
+def test_unhappy_areas_over_threshold():
+    t = form.UNHAPPY_SEVERITY
+    p = {**F(1), "morale": M(5, "Buruk"), "happiness": H(pt=t + 1, club=t, tr=t + 3)}
+    rows = form.summary(doc(p, {**F(2), "morale": M(), "happiness": H(pt=t)}))
+    assert rows[0]["unhappy"] == ["playing_time", "training"]   # strictly above; a value at the threshold is not listed
+    assert rows[0]["morale"] == 5 and rows[0]["morale_text"] == "Buruk"
+    assert rows[1]["unhappy"] == []
+    assert [x["uid"] for x in form.flags(rows)["unhappy"]] == [1]
+
+
+def test_morale_hidden_when_cannot_view():
+    # CanViewHappinessInfo false: the op sends null for both; no flags, no crash
+    rows = form.summary(doc({**F(1), "morale": None, "happiness": None}))
+    assert (rows[0]["morale"], rows[0]["morale_text"], rows[0]["unhappy"]) == (None, None, [])
+    assert form.flags(rows)["unhappy"] == []
+
+
+def test_squad_form_text_and_json_show_morale(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "form": fixture("form.json")})
+    r = run("squad", "form")
+    assert "morale" in r.stdout.splitlines()[0] and "Buruk" in r.stdout and "playing_time" in r.stdout
+    assert "Unhappy:" in r.stdout and "Budi Santoso" in r.stdout.split("Unhappy:")[1]
+    res = json.loads(run("--json", "squad", "form").stdout)["result"]
+    assert res["players"][1]["unhappy"] == ["playing_time"] and res["players"][2]["morale"] is None
