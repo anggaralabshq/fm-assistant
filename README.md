@@ -36,10 +36,15 @@ Back up your save folder before trying anything new; this release only reads, bu
 | Command | What you get |
 |---|---|
 | `fm doctor` | loader, plugin, game build, career, one read per feature |
+| `fm briefing` | one-screen session summary: next match, injuries, tired, contracts, concerns, form, vacancies, loans |
+| `fm fixtures [--n 5]` | upcoming matches (home/away, competition) and the assistant's note on the next opponent |
 | `fm club budget` | balance, transfer budget, wage budget / committed / headroom, staff slots |
 | `fm squad list [--team first\|reserve\|youth]` | players, positions, condition, injuries |
 | `fm squad watch [--within 180]` | contracts ending soon; injured players' return date and matches missed |
 | `fm squad depth` | fit players per position against your minimums (`~/.fm-assistant/depth.json`, default 2); no formations |
+| `fm squad contracts` | squad status, contract end, release clause, against the game's wage structure |
+| `fm squad form` | season appearances and rating, last five matches, unhappy players, club atmosphere |
+| `fm squad loans` | players out on loan with their games and rating; youth intake date |
 | `fm staff search --role scout [--top 10]` | Staff Search rows ranked for a role (`staff_roles.json`, overridable in `~/.fm-assistant/`) |
 | `fm staff slots` | staff slots per department, with the board's view |
 | `fm staff vacancies [--top 3]` | open staff jobs, each with the best Staff Search candidates for it |
