@@ -67,3 +67,10 @@ def test_squad_contracts_text(monkeypatch):
     r = run("squad", "contracts")
     assert r.exit_code == 0
     assert "Key Player" in r.stdout and "Rp35Jt p/mgg" in r.stdout
+
+
+def test_advised_max_null_when_status_text_is_ambiguous():
+    # the game lists two rows with the same status text (e.g. emergency backup outfield / goalkeeper)
+    structure = [{"status": "Cadangan Darurat", "advised_max": "Rp1Jt"}, {"status": "Cadangan Darurat", "advised_max": "Rp2Jt"}]
+    p = {"uid": 1, "name": "Budi Santoso", "contract": {"end_date": "2027-06-30", "squad_status": {"display": "Cadangan Darurat", "code": 24}}}
+    assert contracts.table([p], structure, date(2026, 8, 3))[0]["advised_max"] is None

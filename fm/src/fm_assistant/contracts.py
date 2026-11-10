@@ -18,7 +18,10 @@ def _clause(m):
 
 def table(players: list, structure: list, today: date) -> list[dict]:
     """One row per player, soonest contract end first, missing end date last."""
-    advised = {r["status"]: r.get("advised_max") for r in structure}
+    advised: dict = {}
+    for r in structure:  # the same status text can appear twice with different advice: then it is ambiguous
+        a = r.get("advised_max")
+        advised[r["status"]] = a if advised.get(r["status"], a) == a else None
     rows = []
     for p in players:
         c = p.get("contract") or {}
