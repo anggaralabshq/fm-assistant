@@ -22,7 +22,13 @@
       "Bash(fm --json inbox*)",
       "Bash(fm --json tactic)",
       "Bash(fm --json squad rotation*)",
-      "Bash(fm --json trends)"
+      "Bash(fm --json trends)",
+      "Bash(fm --json plan*)",
+      "Bash(fm --json log*)"
+    ],
+    "ask": [
+      "Bash(fm --json apply*)",
+      "Bash(fm apply*)"
     ],
     "deny": [
       "Bash(fm call*)",
