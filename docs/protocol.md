@@ -368,6 +368,9 @@ contract after promises).
 | op | args | result | timing |
 |---|---|---|---|
 | `negotiation` | `uid` | Negotiation (below); read-only, not gated | ~1.3 s |
+| `act_shortlist_add` | `uid`, `months=0` (0 = indefinite, 1, 3, 6, 12) | `{verified, before: {shortlisted, count}, after, performed, answer?}`; `answer: "already"` when nothing was needed | ~10 s |
+| `act_shortlist_remove` | `uid` | same shape; confirms the game's dialog | ~13 s |
+| `act_scout_request` | `uid`, `scout_uid`, `duration=week\|month\|full` | `{verified, answer: "pending"\|"already", before: {being_scouted}, after, performed}`; the scout must be one the action lists | ~10 s |
 
 
 

@@ -508,4 +508,87 @@ internal static class Act
     }
 
     private static string Str(JsonNode n) => n is JsonValue v ? v.ToString() : null;
+
+    // ------------------------------------------------------------------ F6: shortlist and scout request
+
+    private const uint ShortlistMonthsId = 1818719336;   // unnamed ActionData int on shortlist leaves (0 = indefinite)
+    private const uint ScoutDurationId = 1098073173;     // unnamed ActionData int on scout leaves (days; 100 = full knowledge)
+    private static readonly int[] ShortlistMonths = { 0, 1, 3, 6, 12 };
+    private static readonly Dictionary<string, int> ScoutDurations = new() { ["week"] = 7, ["month"] = 30, ["full"] = 100 };
+
+    /// {shortlisted, count}: person IsShortlisted (ctx human), Human.HumanShortlistPersonCount (ctx team, IsPlayerRecruitment).
+    private static async Task<JsonObject> ShortlistState(int uid, CancellationToken ct)
+    {
+        await using var scope = new ReadScope(ct);
+        var ps = await scope.ReadMany(new List<Func<TypedValue>> { () => Reader.PersonRef(uid) }, new[] { "IsShortlisted" }, 2500,
+            Ctx(("human", () => Path_("Human"))));
+        var hs = await scope.ReadMany(new List<Func<TypedValue>> { () => Path_("Human") }, new[] { "HumanShortlistPersonCount" }, 2500,
+            Ctx(("team", () => Path_("Human.Team")), ("IsPlayerRecruitment", () => TypedValue.Create(true))));
+        var p = (await scope.Collect(ps))[0];
+        var h = (await scope.Collect(hs))[0];
+        Reader.Require(p, "person", "IsShortlisted");
+        Reader.Require(h, "Human", "HumanShortlistPersonCount");
+        return new JsonObject { ["shortlisted"] = Str(p["IsShortlisted"]) == "True", ["count"] = h["HumanShortlistPersonCount"].Int() };
+    }
+
+    private static async Task<bool> BeingScouted(int uid, CancellationToken ct)
+    {
+        await using var scope = new ReadScope(ct);
+        var p = await scope.ReadOne(() => Reader.PersonRef(uid), new[] { "IsBeingScouted" }, 2500, Ctx(("human", () => Path_("Human"))));
+        var o = (await scope.Collect(new List<Plant> { p }))[0];
+        Reader.Require(o, "person", "IsBeingScouted");
+        return Str(o["IsBeingScouted"]) == "True";
+    }
+
+    /// {uid, months=0, apply_token} -> {verified, before: {shortlisted, count}, after, answer?}.
+    public static async Task<JsonNode> ShortlistAddOp(JsonObject a, CancellationToken ct)
+    {
+        var uid = Uid(a);
+        var months = Meta.Int(a, "months", 0);
+        if (!ShortlistMonths.Contains(months)) throw new OpException("bad-request", "months must be one of 0, 1, 3, 6, 12");
+        await Career(ct);
+        var before = await ShortlistState(uid, ct);
+        if ((bool)before["shortlisted"]) return new JsonObject { ["verified"] = true, ["answer"] = "already", ["before"] = before, ["after"] = before.Copy() };
+        await OpenProfile(uid, true, ct);
+        var perf = await Perform(ShortlistAdd, uid, n => IntOf(Field(ActionData(n), ShortlistMonthsId)) == months, ct);
+        var after = await Until(() => ShortlistState(uid, ct), s => (bool)s["shortlisted"], 5000, ct);
+        var ok = (bool)after["shortlisted"] && after["count"].Int() == before["count"].Int() + 1;
+        return new JsonObject { ["verified"] = ok, ["before"] = before, ["after"] = after, ["performed"] = perf };
+    }
+
+    /// {uid, apply_token} -> {verified, before, after, answer?}. The game asks for confirmation; the op confirms.
+    public static async Task<JsonNode> ShortlistRemoveOp(JsonObject a, CancellationToken ct)
+    {
+        var uid = Uid(a);
+        await Career(ct);
+        var before = await ShortlistState(uid, ct);
+        if (!(bool)before["shortlisted"]) return new JsonObject { ["verified"] = true, ["answer"] = "already", ["before"] = before, ["after"] = before.Copy() };
+        await OpenProfile(uid, true, ct);
+        var perf = await Perform(ShortlistRemove, uid, n => true, ct);
+        var after = await Until(() => ShortlistState(uid, ct), s => !(bool)s["shortlisted"], 5000, ct);
+        var ok = !(bool)after["shortlisted"] && after["count"].Int() == before["count"].Int() - 1;
+        return new JsonObject { ["verified"] = ok, ["before"] = before, ["after"] = after, ["performed"] = perf };
+    }
+
+    /// {uid, scout_uid, duration=week|month|full, apply_token} -> {verified, before: {being_scouted}, after, answer}.
+    /// The leaf is the one under scout_uid's folder (its ActionData names that staff member) with that duration.
+    public static async Task<JsonNode> ScoutRequestOp(JsonObject a, CancellationToken ct)
+    {
+        var uid = Uid(a);
+        var scout = Uid(a, "scout_uid");
+        var duration = Meta.Str(a, "duration") ?? "week";
+        if (!ScoutDurations.TryGetValue(duration, out var days)) throw new OpException("bad-request", "duration must be week, month or full");
+        await Career(ct);
+        var before = await BeingScouted(uid, ct);
+        if (before) return new JsonObject { ["verified"] = true, ["answer"] = "already", ["before"] = new JsonObject { ["being_scouted"] = true }, ["after"] = new JsonObject { ["being_scouted"] = true } };
+        await OpenProfile(uid, true, ct);
+        var perf = await Perform(AssignScout, uid, n =>
+            EncodedPerson(Field(ActionData(n), "DatabaseReferenceField")) == scout && IntOf(Field(ActionData(n), ScoutDurationId)) == days, ct);
+        var after = await Until(() => BeingScouted(uid, ct), b => b, 5000, ct);
+        return new JsonObject
+        {
+            ["verified"] = after, ["answer"] = "pending",   // the report arrives after the date advances
+            ["before"] = new JsonObject { ["being_scouted"] = before }, ["after"] = new JsonObject { ["being_scouted"] = after }, ["performed"] = perf,
+        };
+    }
 }

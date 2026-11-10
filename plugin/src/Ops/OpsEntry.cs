@@ -50,5 +50,8 @@ internal static class OpsEntry
         ["profile_open"] = (DevOnly(Exclusive(Spike.ProfileOpen)), 20),
         ["team_panel_open"] = (DevOnly(Exclusive(Spike.TeamPanelOpen)), 20),
         ["negotiation"] = (Act.Negotiation, 15),
+        ["act_shortlist_add"] = (Exclusive(Act.Gated("act_shortlist_add", Act.ShortlistAddOp)), 60),
+        ["act_shortlist_remove"] = (Exclusive(Act.Gated("act_shortlist_remove", Act.ShortlistRemoveOp)), 60),
+        ["act_scout_request"] = (Exclusive(Act.Gated("act_scout_request", Act.ScoutRequestOp)), 60),
     };
 }
