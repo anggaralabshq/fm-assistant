@@ -54,7 +54,9 @@ Rules enforced by the plugin:
 | `ui_dump` | `panel?`, `depth=12`, `max=400` | visible element tree `{name, type, text, bind, x, y, w, h, children}` | main |
 | `prop_check` | `names[]` | `{name: property id}`; 0 = unknown in this build | main |
 | `tree` | `path=""`, `depth=2`, `max=400` | binding tree `{name, type, value, children}` | main |
-| `read` | `ref: person\|club\|team\|path`, `uid` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}` | decoded props; unresolved ones under `_missing` | main + polling |
+| `read` | `ref: person\|club\|team\|path\|persons`, `uid` / `uids[]` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}`, `ctx: {name: {ref\|path\|int\|bool\|string, uid\|path\|value}}` (binding contexts, see phase 1d), `each: {listprop: [subprops]}`, `max_each=50`, `probe: [names]` | decoded props; unresolved ones under `_missing` | main + polling |
+| `ctx_probe` / `tree_probe` | `ref`/`path` + `props[]` / `names[]` | data handler + required binding contexts per name (no channel opened); dev only | main |
+| `profile_info` / `profile_open` | – / `uid`, `kind=player\|nonplayer` | person-link handler's profile PanelIDs; opens a profile the way a person link does (dev only, UI lock) | main + waits |
 | `list_rows` | `panel`, `index=0`, `start=0`, `max=200` | `{panel, widgets: [{name, type, item_count, columns}], rows}`; backing data of list/table widgets (all rows, decoded) | main |
 | `nav_open` | `panel` (dev only while `~/.fm-assistant/dev-nav` exists: `guid`, or `subtab` = GUID of a visible secondary tab) | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`, `PlayerSearchReport`; `wrong-screen` if it did not open | main + waits |
 | `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
@@ -241,6 +243,17 @@ Never by visible text (the owner's UI is Indonesian):
   frames crashes in libunwind (Phase 0 "startup crash" signature).
 - Tick sources: `UIElementsRuntimeUtility.RepaintPanels`, `PanelManager.Tick`, `Bindings.Update` prefixes, main
   thread only (one launch got no RepaintPanels prefix calls at all).
+
+## Discovery notes (phase 1d)
+
+Details: `docs/discovery/2026-11-10-phase1d.md`.
+- "Context-bound" props need named binding contexts (`Bindings.GetHandler`'s `outRequiredContext`, e.g. `team` +
+  `human` for `Morale` and star ranges). `Reader.PlantOne(..., ctx)` plants them as sibling nodes of the parent;
+  they then land headless in ~1.2 s.
+- Inbox: `Human.HumanPortalFilteredMessages` with contexts `team`, `StringType`, `PortalMessagesTab` (0 all,
+  1 new, 2 tasks, 3 unread), no screen needed.
+- Profiles: `PanelManager.Open(profile PanelID, "player"|"person", PersonReference)`; `Estimated*` wage demands
+  have no handler outside the negotiation flow.
 
 ## Discovery notes (phase 1c)
 
