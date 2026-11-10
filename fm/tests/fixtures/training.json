@@ -1,0 +1,10 @@
+{"today": "2026-08-03", "days": [
+ {"index": 0, "day_of_month": 27, "schedule": "Pramusim", "sessions": ["Kondisi Fisik", "Taktik", "Istirahat"], "match": null},
+ {"index": 1, "day_of_month": 28, "schedule": "Pramusim", "sessions": ["Persiapan Laga", "Pertandingan", "Istirahat"], "match": "PER"},
+ {"index": 2, "day_of_month": 29, "schedule": "Pramusim", "sessions": ["Pemulihan", "Istirahat", "Istirahat"], "match": null},
+ {"index": 3, "day_of_month": 30, "schedule": "Pramusim", "sessions": ["Kondisi Fisik", "Taktik", "Istirahat"], "match": null},
+ {"index": 4, "day_of_month": 31, "schedule": "Pramusim", "sessions": ["Persiapan Laga", "Pertandingan", "Istirahat"], "match": "BAL"},
+ {"index": 5, "day_of_month": 1, "schedule": "Pramusim", "sessions": ["Pemulihan", "Istirahat", "Istirahat"], "match": null},
+ {"index": 6, "day_of_month": 2, "schedule": "Pramusim", "sessions": ["Istirahat", "Istirahat", "Istirahat"], "match": null},
+ {"index": 7, "day_of_month": 3, "schedule": "Pramusim", "sessions": ["Kondisi Fisik", "Taktik", "Istirahat"], "match": null},
+ {"index": 8, "day_of_month": 4, "schedule": "Pramusim", "sessions": ["Persiapan Laga", "Pertandingan", "Istirahat"], "match": "PSM"}]}

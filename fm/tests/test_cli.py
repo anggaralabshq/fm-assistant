@@ -108,3 +108,76 @@ def test_status_when_game_not_running(monkeypatch):
     monkeypatch.setattr(game, "pids", lambda: [])
     r = run("--json", "game", "status")
     assert (r.exit_code, json.loads(r.stdout)["result"]) == (0, {"running": False})
+
+
+# --- feature commands (Tasks 5-9) ---
+from helpers import fixture  # noqa: E402
+
+
+def test_club_budget_shows_headroom_and_slots(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "club": fixture("club.json")})
+    r = run("club", "budget")
+    assert r.exit_code == 0, r.output
+    assert "Rp239Jt" in r.output and "headroom" in r.output and "3000" in r.output
+    assert "coaching 7/9" in r.output
+
+
+def test_squad_list_decodes_positions(monkeypatch):
+    calls = fake_calls(monkeypatch, {"hello": HELLO, "squad": fixture("squad.json")})
+    r = run("--json", "squad", "list", "--team", "youth")
+    assert ("squad", {"team": "youth"}) in calls
+    assert [p["position"] for p in json.loads(r.output)["result"]["players"]] == ["ST (C)", "D (LC)", "GK"]
+
+
+def test_staff_search_ranks_and_tops(monkeypatch):
+    calls = fake_calls(monkeypatch, {"hello": HELLO, "staff_search": fixture("staff_search.json")})
+    r = run("--json", "staff", "search", "--role", "coach_attacking", "--top", "2", "--max", "50")
+    assert ("staff_search", {"max": 50}) in calls
+    res = json.loads(r.output)["result"]
+    assert [s["uid"] for s in res["rows"]] == [12, 11] and res["role"] == "coach_attacking"
+
+
+def test_truncation_flag(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "staff_search": {**fixture("staff_search.json"), "returned": 200}})
+    r = run("staff", "search", "--role", "scout")
+    assert r.exit_code == 0, r.output
+    assert "200 of 5000 shown" in r.output
+
+
+def test_staff_search_unknown_role_is_usage_error(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO})
+    r = run("staff", "search", "--role", "nope")
+    assert r.exit_code == 2 and "coach_attacking" in r.output
+
+
+def test_staff_slots(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "club": fixture("club.json")})
+    r = run("--json", "staff", "slots")
+    assert json.loads(r.output)["result"]["medical"] == {"used": 1, "max": 3}
+
+
+def test_players_search_affordable_uses_club_budget(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "club": fixture("club.json"), "player_search": fixture("player_search.json")})
+    r = run("--json", "players", "search", "--affordable")
+    res = json.loads(r.output)["result"]
+    assert all("budget_unknown" in p for p in res["rows"]) and all("position" in p for p in res["rows"])
+
+
+def test_training_show_limits_weeks(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "training": fixture("training.json")})
+    r = run("--json", "training", "show", "--weeks", "1")
+    days = json.loads(r.output)["result"]["days"]
+    assert [d["date"] for d in days] == ["2026-08-03", "2026-08-04"]
+    r = run("--json", "training", "show", "--weeks", "0")
+    assert [d["date"] for d in json.loads(r.output)["result"]["days"]] == ["2026-08-03"]
+
+
+def test_training_load(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "training": fixture("training.json"), "squad": fixture("squad.json")})
+    r = run("--json", "training", "load")
+    res = json.loads(r.output)["result"]
+    assert res["weeks"]["2026-W31"]["matches"] == 2 and len(res["tired"]) == 1
+
+
+def test_doctor_features_listed():
+    assert [op for _, op, _ in doctor.FEATURES] == ["club", "squad", "staff_search", "player_search", "training"]

@@ -4,6 +4,9 @@ import sys
 
 import click
 
+from datetime import date, timedelta
+
+from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod
 from . import doctor as doctor_mod
 from . import game as game_mod
 from .client import FmClient, FmError, FmUnavailable
@@ -143,6 +146,143 @@ def doctor(ctx, st):
 def call(st, op, args):
     """Developer aid: send one raw op with JSON args, e.g. fm call prop_check '{"names": ["Wage"]}'."""
     emit(st, FmClient(timeout=95).call(op, **json.loads(args)))
+
+
+def table(rows: list[list], header: list[str]) -> str:
+    rows = [[("" if c is None else str(c)) for c in r] for r in [header, *rows]]
+    w = [max(len(r[i]) for r in rows) for i in range(len(header))]
+    return "\n".join("  ".join(c.ljust(w[i]) for i, c in enumerate(r)).rstrip() for r in rows)
+
+
+def shown(res: dict) -> str:
+    return f"{res['returned']} of {res['count']} shown" if res.get("truncated") else f"{res['returned']} shown"
+
+
+def slots_text(slots: dict) -> str:
+    return ", ".join(f"{k} {v['used']}/{v['max']}" for k, v in slots.items())
+
+
+@main.group()
+def club():
+    """Club finances."""
+
+
+@club.command("budget")
+@click.pass_obj
+def club_budget(st):
+    need_hello(st)
+    c = FmClient().call("club")
+    c["wage_headroom"] = budget.wage_headroom(c)
+    # ponytail: headroom is in the game's base-currency sort value; no display text exists for a difference
+    emit(st, c, kv({"club": c["name"], "balance": budget.fmt(c["balance"]),
+                    "transfer budget": budget.fmt(c["transfer_budget"]), "wage budget": budget.fmt(c["wage_budget"]),
+                    "wage committed": budget.fmt(c["wage_committed"]),
+                    "wage headroom": f"{c['wage_headroom']:g} (base-currency value)",
+                    "staff slots": slots_text(c["staff_slots"])}))
+
+
+@main.group()
+def squad():
+    """Squad overview."""
+
+
+@squad.command("list")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_list(st, team):
+    need_hello(st)
+    s = squad_mod.normalize(FmClient().call("squad", team=team))
+    emit(st, s, table([[p["name"], p.get("age"), p["position"], p.get("condition"), p.get("injured")]
+                       for p in s["players"]], ["name", "age", "position", "condition", "injured"]))
+
+
+@main.group()
+def staff():
+    """Staff search and slots (F11)."""
+
+
+@staff.command("search")
+@click.option("--role", required=True, help="Role key from staff_roles.json, e.g. coach_attacking, scout.")
+@click.option("--max-wage", type=float, help="Drop staff whose known wage demand is above this (base-currency value).")
+@click.option("--max", "max_", type=click.IntRange(1, 1000), default=200, show_default=True, help="Rows to read.")
+@click.option("--top", type=click.IntRange(1), default=10, show_default=True)
+@click.pass_obj
+def staff_search(st, role, max_wage, max_, top):
+    roles = staff_mod.load_roles()
+    if role not in roles:
+        raise click.BadParameter(f"valid: {', '.join(sorted(roles))}", param_hint="--role")
+    need_hello(st)
+    res = FmClient(timeout=95).call("staff_search", max=max_)
+    ranked = staff_mod.rank(res["rows"], role, max_wage, roles)[:top]
+    out = {**res, "role": role, "rows": ranked}
+    emit(st, out, table([[s["score"], s["name"], s.get("age"), s.get("preferred_job"),
+                          budget.fmt(s.get("wage_demand")), "" if max_wage is None else {True: "over", False: "ok", None: "?"}[s["over_budget"]]]
+                         for s in ranked], ["score", "name", "age", "job", "wage demand", "budget"])
+         + f"\n{shown(res)}")
+
+
+@staff.command("slots")
+@click.pass_obj
+def staff_slots(st):
+    need_hello(st)
+    slots = FmClient().call("club")["staff_slots"]
+    emit(st, slots, slots_text(slots))
+
+
+@main.group()
+def players():
+    """Player search respecting scouting knowledge (F6)."""
+
+
+@players.command("search")
+@click.option("--max", "max_", type=click.IntRange(1, 1000), default=200, show_default=True)
+@click.option("--affordable", is_flag=True, help="Keep players whose known price and wage fit the club budget.")
+@click.pass_obj
+def players_search(st, max_, affordable):
+    need_hello(st)
+    c = FmClient()
+    res = players_mod.normalize(c.call("player_search", max=max_))
+    if affordable:
+        club_ = c.call("club")
+        res["rows"] = players_mod.affordable(res["rows"], club_["transfer_budget"]["value"], budget.wage_headroom(club_))
+    emit(st, res, table([[p["name"], p.get("age"), p["position"], budget.fmt(p.get("asking_price") or p.get("value")),
+                          budget.fmt(p.get("wage")), p.get("scout_rating")] for p in res["rows"]],
+                        ["name", "age", "position", "price", "wage", "scout"])
+         + f"\n{shown(res)}" + (f", {len(res['rows'])} affordable" if affordable else ""))
+
+
+@main.group()
+def training():
+    """Training calendar and squad load (F10)."""
+
+
+def _training_days() -> tuple[list, date]:
+    cal = FmClient(timeout=95).call("training")
+    return training_mod.with_dates(cal), date.fromisoformat(cal["today"])
+
+
+@training.command("show")
+@click.option("--weeks", type=click.IntRange(0), default=2, show_default=True, help="Days from today through today + 7*N.")
+@click.pass_obj
+def training_show(st, weeks):
+    need_hello(st)
+    days, today = _training_days()
+    end = (today + timedelta(days=7 * weeks)).isoformat()
+    days = [d for d in days if today.isoformat() <= d["date"] <= end]
+    emit(st, {"today": today.isoformat(), "days": days},
+         table([[d["date"], d.get("match") or "", *d["sessions"]] for d in days], ["date", "match", "s1", "s2", "s3"]))
+
+
+@training.command("load")
+@click.pass_obj
+def training_load(st):
+    need_hello(st)
+    days, _ = _training_days()
+    load = training_mod.week_load(days, FmClient().call("squad", team="first")["players"])
+    text = "\n".join(f"{w}: {v['matches']} match(es); " + ", ".join(f"{k} {n}" for k, n in v["sessions"].items())
+                     for w, v in load["weeks"].items())
+    text += "\ntired: " + (", ".join(p["name"] for p in load["tired"]) or "none")
+    emit(st, load, text)
 
 
 if __name__ == "__main__":

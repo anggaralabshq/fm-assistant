@@ -9,7 +9,13 @@ LOADER_LOG = GAME_DIR / "FM27-BepInEx/BepInEx/LogOutput.log"
 SESSION = SESSION_PATH
 
 # (check name, op, args): one read per feature, appended as features land.
-FEATURES: list[tuple[str, str, dict]] = []
+FEATURES: list[tuple[str, str, dict]] = [
+    ("club read", "club", {}),
+    ("squad read", "squad", {"team": "first"}),
+    ("staff search read", "staff_search", {"max": 20}),
+    ("player search read", "player_search", {"max": 20}),
+    ("training read", "training", {}),
+]
 
 
 def run() -> list[dict]:
@@ -37,9 +43,10 @@ def run() -> list[dict]:
         f"{h['game_build']} (tested: {', '.join(h['tested_builds'])})")
     if not add("career loaded", h["career_loaded"], f"club uid {h['human_club_uid']}"):
         return out
+    slow = FmClient(timeout=95)   # feature reads may navigate the UI first
     for name, op, args in FEATURES:
         try:
-            c.call(op, **args)
+            slow.call(op, **args)
             add(name, True)
         except FmError as e:
             add(name, False, f"{e.code}: {e.detail}")

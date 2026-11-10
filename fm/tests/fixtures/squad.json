@@ -1,0 +1,8 @@
+{"club": {"uid": 900001, "name": "Pantai Utara FC"}, "team": {"uid": 900101, "name": "Pantai Utara FC"}, "count": 3,
+ "players": [
+  {"uid": 1, "name": "Rúben Gonçalves", "age": 27, "position_mask": 16384, "attributes": {"AttributeFinishing": 15, "AttributePace": 14},
+   "condition": 96, "fatigue": 120, "injured": false, "contract": {"wage": {"display": "Rp27Jt p/mgg", "value": 1128}, "end_date": "2028-06-30", "length_days": 600}},
+  {"uid": 2, "name": "広瀬 圭", "age": 22, "position_mask": 1048592, "attributes": {"AttributeTackling": 13},
+   "condition": 81, "fatigue": 300, "injured": false, "contract": {"wage": {"display": "Rp12Jt p/mgg", "value": 500}, "end_date": "2027-06-30", "length_days": 230}},
+  {"uid": 3, "name": "Dimas Prakoso", "age": 31, "position_mask": 1, "attributes": {},
+   "condition": 99, "fatigue": 10, "injured": true, "contract": {"wage": {"display": "Rp8Jt p/mgg", "value": 330}, "end_date": "2026-12-31", "length_days": 50}}]}

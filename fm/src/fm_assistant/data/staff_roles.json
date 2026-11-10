@@ -1,0 +1,12 @@
+{
+  "coach_attacking": {"Attacking": 3, "Technical": 2, "Tactical": 1, "Determination": 1, "Motivating": 1},
+  "coach_defending": {"Defending": 3, "Tactical": 2, "Technical": 1, "Determination": 1, "Motivating": 1},
+  "coach_fitness": {"CoachingFitness": 3, "SportsScience": 1, "Determination": 1, "Motivating": 1},
+  "scout": {"JudgingPlayerAbility": 3, "JudgingPlayerPotential": 3, "Adaptability": 1},
+  "recruitment_analyst": {"JudgingPlayerAbility": 2, "JudgingPlayerPotential": 2, "AnalysingData": 2},
+  "performance_analyst": {"AnalysingData": 3, "TacticalKnowledge": 2},
+  "physio": {"Physiotherapy": 3, "SportsScience": 1},
+  "sports_scientist": {"SportsScience": 3, "Physiotherapy": 1},
+  "set_piece_coach": {"SetPieces": 3, "Tactical": 1},
+  "director_of_football": {"JudgingStaffAbility": 2, "JudgingPlayerAbility": 2, "Negotiating": 2, "PeopleManagement": 1}
+}
