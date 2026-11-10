@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
 from . import contracts as contracts_mod
 from . import depth as depth_mod
+from . import fixtures as fixtures_mod
 from . import form as form_mod
 from . import vacancies as vacancies_mod
 from . import doctor as doctor_mod
@@ -301,6 +302,22 @@ def squad_depth(st, team):
     need_hello(st)
     res = _depth_for(team)
     emit(st, res, depth_text(res))
+
+
+@main.command()
+@click.option("--n", type=click.IntRange(1, 10), default=5, show_default=True, help="Upcoming fixtures to read.")
+@click.pass_obj
+def fixtures(st, n):
+    """Next fixtures, the assistant's note on the next opponent and its most used formation."""
+    need_hello(st)
+    res = FmClient().call("fixtures", n=n)
+    today = date.fromisoformat(res["today"])
+
+    def with_days(f):
+        return f and {**f, "days_until": fixtures_mod.days_until(f, today)}
+
+    out = {**res, "next": with_days(res.get("next")), "upcoming": [with_days(f) for f in res.get("upcoming") or []]}
+    emit(st, out, fixtures_mod.text(res))
 
 
 @main.group()
