@@ -41,6 +41,8 @@ Rules enforced by the plugin:
 | `ui-element-missing` | an expected UI element was not found |
 | `main-thread-timeout` | the game's main thread did not run the job before its deadline |
 | `binding-api-changed` | a game API the plugin relies on is missing (likely a game update) |
+| `forbidden` | action op without a valid apply token, or on an untested game build (see "Actions") |
+| `precondition` | action op refused before anything was sent (wrong target, board limit, stage); detail says why |
 | `internal` | anything else; detail has the exception message |
 
 ## Ops
@@ -337,6 +339,46 @@ with the day headers (binding `day.DayOfTheMonth`, e.g. `31 Agu`, `1 Sep`, `2`) 
 `Day = {index, day_label, day_of_month, weekday, schedule, sessions[3], session_types[3], match}`; a match slot is
 `null` in `sessions`/`session_types`. The view is the month the screen shows (normally today's month), so days
 after its last week are not included.
+
+## Actions
+
+Action ops change the career (in memory; nothing is saved). They are gated:
+
+- Tested game build only (`hello.tested_builds`), else `forbidden` "actions are disabled on untested build X".
+- `apply_token`: 32 lowercase hex chars naming a file `~/.fm-assistant/apply/<token>` written by `fm apply`
+  (content `{"plan_id", "index", "kind"}`). The plugin consumes it before acting (rename to `.used`, read, delete),
+  so a token works once. Missing, malformed, unknown or reused token → `forbidden`. A token whose `kind` belongs to
+  another op → `forbidden` "apply token was written for <kind>, not <op>".
+- Kinds → ops: `staff.approach` `act_staff_approach`, `staff.offer` `act_staff_offer`, `shortlist.add`
+  `act_shortlist_add`, `shortlist.remove` `act_shortlist_remove`, `scout.request_report` `act_scout_request`,
+  `training.set_sessions` `act_training_sessions`, `training.set_focus` `act_training_focus`,
+  `contract.open_renewal` `act_contract_open`, `contract.offer_renewal` `act_contract_offer`.
+- Every action op holds the UI lock and needs a loaded career.
+
+Person actions run through the person's profile (opened like a person link; the op waits until the profile shows
+the uid). The action is an allow-listed `ActionEntry` of the profile's secondary tabs, performed with
+`PluginContextActionsModule.HandleActionEvent`; the entry's `ActionData` must name the target person, else
+`ui-element-missing`. Allow-list (action ids): approach to sign `1749837424`, offer contract `2000111204`, shortlist
+add `1097488485`, shortlist remove `1500280650`, assign scout `1363818831`. Entries that ask for confirmation get
+the game's `GenericModalDialog` primary button; on any error after the dialog opened it is cancelled.
+Negotiation buttons are the screen's speak-to buttons, clicked only when the button at the action's position shows
+that action's own title (`ContractEditSession.SpeakTo.Actions`, events: 20 propose, 41 finalize, 140 negotiate
+contract after promises).
+
+| op | args | result | timing |
+|---|---|---|---|
+| `negotiation` | `uid` | Negotiation (below); read-only, not gated | ~1.3 s |
+
+
+
+Negotiation = `{open, on_screen, stage, wage, job, end_date, board_max_wage, wage_over_board_max, patience: {status,
+value}, changed_by_other_party, read_only, key_info: [text]}`, read headless from `Person.ContractEditSession`
+(contexts `human`, `BuyingClub`). The game computes a session for anyone (the terms it would offer), so `open` =
+the negotiation screen shows this person, or the session carries a reply (changed by the other party, patience
+status set, read-only). `stage` = `promises`/`contract` from the screen when on screen; off screen an open session
+is `contract`; null when not open. `job` = job group (`recruitment`/`coaching`/`medical`, null for players).
+`board_max_wage` = the largest step of the wage step list (above it the game disables `+` and sets
+`wage_over_board_max`). `end_date` = `YYYY-MM-DD`.
 
 ## Navigation routes (nav_open)
 

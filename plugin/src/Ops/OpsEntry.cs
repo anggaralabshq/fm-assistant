@@ -49,5 +49,6 @@ internal static class OpsEntry
         ["tree_probe"] = (DevOnly(Spike.TreeProbe), 10),
         ["profile_open"] = (DevOnly(Exclusive(Spike.ProfileOpen)), 20),
         ["team_panel_open"] = (DevOnly(Exclusive(Spike.TeamPanelOpen)), 20),
+        ["negotiation"] = (Act.Negotiation, 15),
     };
 }

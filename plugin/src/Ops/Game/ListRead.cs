@@ -32,7 +32,7 @@ internal static class ListRead
         return items == null ? 0 : items.Cast<Il2CppSystem.Collections.ICollection>().Count;
     }
 
-    private static Il2CppSystem.Collections.IList Items(StreamedListView sl)
+    internal static Il2CppSystem.Collections.IList Items(StreamedListView sl)
     {
         Il2CppSystem.Collections.IList items = null;
         try { items = sl.SourceData; } catch { }
