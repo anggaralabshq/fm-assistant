@@ -80,6 +80,8 @@ internal static class Fixtures
             var loc = t["NextMatchLocation"].Int();
             if (f.Home != null && loc != null && (loc == HomeLocation) != f.Home) f = f with { Home = null };
             next = Out(f, names, comps);
+            // a FixtureReference with no date or opponent (e.g. an empty placeholder at season end) is no fixture
+            if (next["date"] == null || next["opponent"] == null) next = null;
         }
         var upcoming = fixtures.Skip(nextVal != null ? 1 : 0)
             .Where(f => f.Date != null && string.CompareOrdinal(f.Date, today) >= 0)

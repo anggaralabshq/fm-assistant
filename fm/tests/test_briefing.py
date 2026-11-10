@@ -48,3 +48,11 @@ def test_briefing_cli_calls_no_staff_search(monkeypatch):
     assert r.exit_code == 0, r.output + r.stderr
     assert "staff_search" not in [c[0] for c in calls] and "player_search" not in [c[0] for c in calls]
     assert json.loads(r.stdout)["result"]["today"] == "2026-08-03"
+
+
+def test_briefing_survives_bad_data_in_one_part():
+    fx = {**fixture("fixtures.json"), "next": {"date": None, "opponent": None, "home": None, "competition": None}}
+    b = briefing.build(parts(fixtures=fx))
+    assert b["injuries"] and b["vacancies_open"] == 5
+    t = briefing.text(b)
+    assert "injured:" in t

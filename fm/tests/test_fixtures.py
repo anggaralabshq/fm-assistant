@@ -58,3 +58,8 @@ def test_fixtures_cli_none_scheduled(monkeypatch):
     assert r.exit_code == 0
     assert "no fixture scheduled" in r.stdout
     assert json.loads(run("--json", "fixtures").stdout)["result"]["next"] is None
+
+
+def test_days_until_unknown_date_is_none():
+    from datetime import date
+    assert fixtures.days_until({"date": None}, date(2026, 8, 3)) is None

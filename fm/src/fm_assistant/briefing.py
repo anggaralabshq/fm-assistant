@@ -12,42 +12,69 @@ def _ok(p) -> bool:
     return isinstance(p, dict) and "error" not in p
 
 
+def _guard(b: dict, keys: tuple, fn) -> None:
+    """Run one section; unexpected data in it becomes {"error": "internal"} for its keys only."""
+    try:
+        fn()
+    except (KeyError, TypeError, ValueError, AttributeError):
+        for k in keys:
+            b[k] = {"error": "internal"}
+
+
 def build(parts: dict) -> dict:
     sq, tr, fx, fo, cl, lo = (parts.get(k) for k in PARTS)
     today_s = next((p["today"] for p in (sq, tr, fx) if _ok(p) and p.get("today")), None)
     today = date.fromisoformat(today_s) if today_s else None
     days = training_mod.with_dates(tr) if _ok(tr) else []
     b: dict = {"today": today_s}
-    if _ok(fx):
-        nxt = fx.get("next")
-        b["next_fixture"] = nxt and {**nxt, "days_until": fixtures_mod.days_until(nxt, today) if today else None,
-                                     "threat": fx.get("threat")}
-    else:
-        b["next_fixture"] = fx or {"error": "missing"}
-    if _ok(sq) and today:
-        players = sq["players"]
-        inj = watch_mod.injuries(players, today, days)
-        if not days:  # no calendar: a match count would be a guess
-            inj = [{**i, "matches_missed": None, "beyond_view": False} for i in inj]
-        b["injuries"] = inj
-        b["expiring"] = watch_mod.expiring(players, today, 180)
-        b["tired"] = [{"uid": p["uid"], "name": p["name"], "condition": p["condition"]} for p in players
-                      if not p.get("injured") and isinstance(p.get("condition"), (int, float))
-                      and 0 <= p["condition"] < training_mod.CONDITION_MIN]
-    else:
-        b["injuries"] = b["expiring"] = b["tired"] = sq if not _ok(sq) else {"error": "no-date"}
-    if _ok(fo):
-        fl = form_mod.flags(form_mod.summary(fo))
-        b["concerns"], b["low_form"] = fl["concerns"], fl["low_form"]
-    else:
-        b["concerns"] = b["low_form"] = fo or {"error": "missing"}
-    b["vacancies_open"] = sum(j["open"] for j in vacancies_mod.open_jobs(cl)) if _ok(cl) else (cl or {"error": "missing"})
-    if _ok(lo):
-        lo = loans_mod.normalize(lo)
-        b["loans_flagged"] = loans_mod.flags(lo["out"], date.fromisoformat(lo["today"]))
-        b["intake_days"] = (lo.get("intake") or {}).get("days")
-    else:
-        b["loans_flagged"] = b["intake_days"] = lo or {"error": "missing"}
+    def fixture_part():
+        if _ok(fx):
+            nxt = fx.get("next")
+            if nxt and not (nxt.get("date") and nxt.get("opponent")):
+                raise ValueError("fixture without date or opponent")
+            b["next_fixture"] = nxt and {**nxt, "days_until": fixtures_mod.days_until(nxt, today) if today else None,
+                                         "threat": fx.get("threat")}
+        else:
+            b["next_fixture"] = fx or {"error": "missing"}
+
+    def squad_part():
+        if _ok(sq) and today:
+            players = sq["players"]
+            inj = watch_mod.injuries(players, today, days)
+            if not days:  # no calendar: a match count would be a guess
+                inj = [{**i, "matches_missed": None, "beyond_view": False} for i in inj]
+            b["injuries"] = inj
+            b["expiring"] = watch_mod.expiring(players, today, 180)
+            b["tired"] = [{"uid": p["uid"], "name": p["name"], "condition": p["condition"]} for p in players
+                          if not p.get("injured") and isinstance(p.get("condition"), (int, float))
+                          and 0 <= p["condition"] < training_mod.CONDITION_MIN]
+        else:
+            b["injuries"] = b["expiring"] = b["tired"] = sq if not _ok(sq) else {"error": "no-date"}
+
+    def form_part():
+        if _ok(fo):
+            fl = form_mod.flags(form_mod.summary(fo))
+            b["concerns"], b["low_form"] = fl["concerns"], fl["low_form"]
+        else:
+            b["concerns"] = b["low_form"] = fo or {"error": "missing"}
+
+    def club_part():
+        b["vacancies_open"] = (sum(j["open"] for j in vacancies_mod.open_jobs(cl)) if _ok(cl)
+                               else (cl or {"error": "missing"}))
+
+    def loans_part():
+        if _ok(lo):
+            n = loans_mod.normalize(lo)
+            b["loans_flagged"] = loans_mod.flags(n["out"], date.fromisoformat(n["today"]))
+            b["intake_days"] = (n.get("intake") or {}).get("days")
+        else:
+            b["loans_flagged"] = b["intake_days"] = lo or {"error": "missing"}
+
+    _guard(b, ("next_fixture",), fixture_part)
+    _guard(b, ("injuries", "expiring", "tired"), squad_part)
+    _guard(b, ("concerns", "low_form"), form_part)
+    _guard(b, ("vacancies_open",), club_part)
+    _guard(b, ("loans_flagged", "intake_days"), loans_part)
     return b
 
 
@@ -64,7 +91,10 @@ def text(b: dict) -> str:
         if isinstance(val, dict) and "error" in val:
             lines.append(f"{label}: unavailable ({val['error']})")
         elif val:
-            lines.append(f"{label}: {fmt(val)}")
+            try:
+                lines.append(f"{label}: {fmt(val)}")
+            except (KeyError, TypeError, ValueError, AttributeError):
+                lines.append(f"{label}: unavailable (internal)")
 
     nf = b.get("next_fixture")
     if nf is None:
