@@ -59,11 +59,14 @@ Rules enforced by the plugin:
 | `nav_open` | `panel` (dev only while `~/.fm-assistant/dev-nav` exists: `guid`, or `subtab` = GUID of a visible secondary tab) | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`, `PlayerSearchReport`; `wrong-screen` if it did not open | main + waits |
 | `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
 
-| `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots}`; see below | main + polling |
+| `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots, wage_structure}`; see below | main + polling |
 | `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, today, count, players: [Player]}` (`today` = `game.CurrentGameDate`, as in `training`); see below | main + polling |
 | `staff_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Staff]}`; opens `StaffSearchReport` itself | main + polling |
 | `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
 | `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
+| `form` | `team=first\|reserve\|youth` | `{today, team: {uid, name, kind}, players: [Form], concerns: [uid], atmosphere: {level, text}\|null}`; see below | main + polling |
+| `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation}`; see below | main + polling |
+| `loans` | – | `{today, out: [Loan], intake: {date, days}}`; see below | main + polling |
 
 There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
 manager cannot see (hidden attributes), so they answer only in dev mode (file `~/.fm-assistant/dev-nav` exists);
@@ -90,6 +93,13 @@ Human club (`Human.Club` uid) props: `TransferBudget`, `WageBudget` (per week), 
 `StaffRecruitmentSubGroup`, `StaffMedicalSubGroup`: `Count` → `used`, `MaxValue` → `max` (the board's target;
 `used > max` happens), `ShortString` → `summary`, `StaffSubGroupCountFeedbackString` → `board_feedback`,
 `StaffSubGroupJobsData[]` → `jobs: [{job, job_type, used, max}]`.
+`WagesData.PlayerTypeWageData` (required) → `wage_structure: [{status, count, average, highest, lowest, advised_max, total, over}]`,
+one row per squad status in the game's order: `status` = `Name` (localized), `count` = `Quantity`, `average`/`highest`/
+`lowest`/`advised_max` = `AverageBasicWage`/`HighestBasicWage`/`LowestBasicWage`/`AdvisedMaxBasicWage` (display strings
+only, the game gives no number), `total` = `{display: TotalBasicWage, value: TotalBasicWageValue}` (base currency),
+`over` = `IsOverWages`. 17 rows on build 27.0.0.2493426, rows with `count` 0 included (their strings are a placeholder
+minimum, `total.value` 0). Two rows can share a `status` display (emergency backup, outfield and goalkeeper), and the
+last row is the overall total (all statuses; `count` = whole squad), not a status.
 Known gap: the ClubScreen "transfer/wage budget" tile showed Rp5,75M while `TransferBudget` formats to Rp5,71M
 (build 27.0.0.2493426); the tile's source is a VisualFunction not identified yet. Finance (`Keuangan`) is a
 secondary-tab dropdown (`SecondaryTabDropdownButton`, no SIButton), not reachable by `ClickSubtab` yet.
@@ -102,9 +112,18 @@ mask, multi-position; decoded by `fm_assistant.positions`), `Condition` (percent
 players read about −360…−270 on build 27.0.0.2493426, higher = more tired; no threshold used yet), `IsInjured`
 (`"True"`/`"False"`), `CurrentInjury` (`InjuryDescription`, `InjuryReturnDays`), visible `Attribute*` (47 names, see
 `Squad.Attributes`; off the ball is `AttributeMovement`; hidden personality attributes are never requested),
-`FullContract` → `Wage` (`{display, sort}` → Money), `EndDate`, `ContractLength` (total contract length in days, start → end; NOT days left — use `EndDate`).
+`FullContract` → `Wage` (`{display, sort}` → Money), `EndDate`, `ContractLength` (total contract length in days, start → end; NOT days left — use `EndDate`),
+`StartDate`, `AgreedPlayingTime` (squad status `{display, sort}` → `squad_status: {display, code}`; `display` localized,
+logic uses `code`), `MinimumFeeReleaseClauseValue` (`{display, sort}` → Money; `sort` 0 / display `"-"` = none →
+`release_clause: null`), `HasRenewalOffer` (→ `renewal_offer` bool|null).
 `Player = {uid, name, age, position_mask, attributes, condition, fatigue, injured, injury: {description,
-return_days}|null, contract: {wage, end_date, length_days}}`.
+return_days}|null, contract: {wage, end_date, length_days, start_date, squad_status, release_clause, renewal_offer}}`.
+
+`AgreedPlayingTime.sort` codes seen live (build 27.0.0.2493426; English meaning inferred from the localized label and the
+FM status list, not read from the game): 2 on loan (currently loaned out), 5 emergency backup, 7 youngster,
+10 breakthrough prospect, 11 backup (goalkeeper), 13 rotation / fringe player, 19 first-team backup (impact sub),
+21 first-choice goalkeeper, 22 regular starter, 23 important player, 24 star player. Other codes (squad player, future
+prospect, cup goalkeeper, not needed, trial) exist but were not held by any player in this save.
 
 ### staff_search
 
@@ -132,6 +151,54 @@ not the table's knowledge column (whose source is not identified; it read "none"
 knowledge was "known").
 `Prospect = {uid, name, age, position_mask, club_uid, value, asking_price, wage, contract_end, value_knowledge,
 scout_rating, attributes}`.
+
+### form
+
+Team as in `squad` (`Team.Players`, read in batches of 10). Person props: `Name`, `SeasonStatsList` (one record per
+competition: `Competition` comp ref or `NullReference`, `Appearances`, `StartingAppearances`, `SubAppearances`,
+`AppearancesForRating`, `AverageRating`), `LastFiveClubMatchesForm` (`LastFiveMatchesRating`,
+`LastFiveMatchesListHasValidFixtures`, `LastFiveMatchesList[]` with `MinuteSubOn`/`MinuteSubOff`/`MinuteSentOff`).
+Competition names: the record's `Competition` value is planted directly (`Reader.ListField`) once per comp uid, prop
+`Name`; a `NullReference` competition (friendlies) is `competition: null`. Team props: `HappinessIssuesPlayers` (person
+refs → `concerns`), `ClubAtmosphereFeedback` (`CurrentDynamicSupportLevel` → `atmosphere.level`,
+`CurrentDynamicSupportStringShort` (localized) → `atmosphere.text`).
+`Form = {uid, name, season: [{competition, apps, starts, subs, rating}], last5: {rating, valid, minutes: [int|null]}}`.
+- `season[].rating` = `AverageRating`, null when `AppearancesForRating` is 0 (never a 0.0 rating).
+- `last5.valid` = `LastFiveMatchesListHasValidFixtures` and a non-empty list; `last5.rating` is null when not valid.
+- `last5.minutes`, one per listed match (most recent first, as the game lists them): sub on/off 0/0 = 90; a sub-off
+  minute ends the stint, else a sending-off minute, else 90; minus the sub-on minute. Unreadable or negative → null.
+  Extra time is not counted. There is no season-minutes prop.
+- Early season / friendlies only: competitive counters are 0 and `Competition` is null; ratings come from the
+  friendlies' records (competition null).
+
+### fixtures
+
+First team (`Club.MainTeam`). Team props: `NextFixture` (`FixtureReference`), `NextMatchOpponent`, `NextMatchLocation`,
+`Next5FixturesData` (5 × `{Fixture, Team}`), `NextOppositionThreatLevelAssessment` (localized sentence → `threat`;
+null when empty or no next fixture), and for `n` > 5 `RemainingLeagueFixtures` (`{Fixture, Team}` records, league
+only). A `FixtureReference` inside a list record has no uid, so the op plants on each record's `Fixture` value
+directly (`Reader.ListField`) and reads `FixtureDate`, `HomeTeam`, `AwayTeam`, `Competition` (→ comp `Name`, planted on
+the comp value once per comp uid). Opponent names: team `Name`; `opponent_formation` = the next opponent's
+`MostUsedFormation` (localized, as the game shows it; never used for advice).
+`Fixture = {date, opponent: {uid, name}, home, competition}`.
+- `home`: own team uid == `HomeTeam` → true, == `AwayTeam` → false, neither → null (the opponent then comes from the
+  record's `Team` / `NextMatchOpponent`). For `next` only: when `NextMatchLocation` disagrees with that comparison
+  (1 = home is the only value seen) `home` is null (e.g. a neutral venue).
+- `upcoming`: the next fixtures, date ascending, `date` ≥ `today`, deduplicated by (date, opponent), at most `n`;
+  `upcoming[0]` equals `next` when both exist. Beyond the fifth fixture only league fixtures are known (cup ties after
+  the fifth are missing).
+- No next fixture: `next: null`, `threat: null`, `opponent_formation: null`.
+
+### loans
+
+Club props (`Human.Club`): `PlayersOutOnLoan` (person refs; required), `IntakeDate` → `intake.date`,
+`DaysUntilYouthIntake` → `intake.days`. Per loanee (batches of 10; none read when the list is empty): `Name`, `Age`,
+`LoanClub` (club ref → `club: {uid, name}`, name = club `Name`), `LoanContract` → `StartDate`, `EndDate`,
+`LoanAppearances` → `apps`, `LoanAverageRating` → `rating` (null when `apps` is 0, never 0.0), `LoanHappiness` (int),
+`LoanReport` → `AgreedPlayingTime` / `ActualPlayingTime` (localized strings, display only; `"-"` or empty → null).
+`Loan = {uid, name, age, club: {uid, name}, start_date, end_date, apps, rating, happiness, agreed_time, actual_time}`.
+`LoanClub` is not a test for "out on loan" (it reads the own club for players at home); the list is the source.
+Loanees also stay in their team's `Players` (seen in the reserve team, squad status code 2).
 
 ### training
 

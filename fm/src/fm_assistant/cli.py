@@ -7,7 +7,12 @@ import click
 from datetime import date, timedelta
 
 from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
+from . import contracts as contracts_mod
 from . import depth as depth_mod
+from . import briefing as briefing_mod
+from . import fixtures as fixtures_mod
+from . import form as form_mod
+from . import loans as loans_mod
 from . import vacancies as vacancies_mod
 from . import doctor as doctor_mod
 from . import game as game_mod
@@ -172,6 +177,23 @@ def slots_text(slots: dict) -> str:
     return ", ".join(f"{k} {v['used']}/{v['max']}" for k, v in slots.items())
 
 
+@main.command("briefing")
+@click.pass_obj
+def briefing_cmd(st):
+    """Session briefing: next match, injuries, tired, contracts, concerns, form, vacancies, loans (no slow searches)."""
+    need_hello(st)
+    c = FmClient()
+    parts = {}
+    for op, args in (("squad", {"team": "first"}), ("training", {}), ("fixtures", {"n": 5}), ("form", {"team": "first"}),
+                     ("club", {}), ("loans", {})):
+        try:
+            parts[op] = c.call(op, **args)
+        except FmError as e:  # one failed part never hides the others; FmUnavailable still stops the command
+            parts[op] = {"error": e.code}
+    b = briefing_mod.build(parts)
+    emit(st, b, briefing_mod.text(b))
+
+
 @main.group()
 def club():
     """Club finances."""
@@ -228,6 +250,77 @@ def squad_watch(st, within, team):
     emit(st, {"today": today.isoformat(), "expiring": exp, "injured": inj}, text)
 
 
+@squad.command("contracts")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_contracts(st, team):
+    """Contract end, squad status, release clause and the game's advised wage cap per status."""
+    need_hello(st)
+    c = FmClient()
+    s = c.call("squad", team=team)
+    structure = c.call("club")["wage_structure"]
+    today = date.fromisoformat(s["today"])
+    rows = contracts_mod.table(s["players"], structure, today)
+    flag = {True: "yes", False: "no", None: "?"}
+    text = (table([[r["name"], r["age"], (r["squad_status"] or {}).get("display"), r["end_date"], r["days_left"],
+                    budget.fmt(r["wage"]), budget.fmt(r["release_clause"]) if r["release_clause"] else "none",
+                    flag[r["renewal_offer"]], r["advised_max"]] for r in rows],
+                   ["name", "age", "status", "ends", "days left", "wage", "release", "renewal offer", "advice for status"])
+            + "\n\nWage structure\n"
+            + table([[w["status"], w["count"], w["average"], w["highest"], w["lowest"], w["advised_max"],
+                      w["total"]["display"], flag[w["over"]]] for w in structure],
+                    ["status", "count", "average", "highest", "lowest", "advised max", "total", "over"]))
+    emit(st, {"today": today.isoformat(), "players": rows, "wage_structure": structure}, text)
+
+
+@squad.command("form")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_form(st, team):
+    """Season rating, last five matches and squad concerns. 'no matches yet' = nothing played, not bad form."""
+    need_hello(st)
+    f = FmClient().call("form", team=team)
+    rows = form_mod.summary(f)
+    fl = form_mod.flags(rows)
+
+    def rate(v, none="no matches yet"):
+        return none if v is None else f"{v:.2f}"
+
+    def names(key):
+        return ", ".join(r["name"] for r in fl[key]) or "none"
+
+    text = (table([[r["name"], r["apps"], rate(r["rating"]), rate(r["last5_rating"], "-"), r["last5_minutes"],
+                    "yes" if r["concern"] else ""] for r in rows],
+                  ["name", "apps", "rating", "last 5", "last 5 min", "concern"])
+            + f"\n\nLow form (last 5 under {form_mod.LOW_FORM}): {names('low_form')}"
+            + f"\nUnused (no appearances): {names('unused')}"
+            + f"\nConcerns: {names('concerns')}"
+            + f"\nClub atmosphere: {(f.get('atmosphere') or {}).get('text') or '?'}")
+    emit(st, {"today": f["today"], "team": f["team"], "players": rows, "flags": fl,
+              "atmosphere": f.get("atmosphere")}, text)
+
+
+@squad.command("loans")
+@click.pass_obj
+def squad_loans(st):
+    """Players out on loan with their appearances, and the next youth intake."""
+    need_hello(st)
+    res = loans_mod.normalize(FmClient().call("loans"))
+    flagged = loans_mod.flags(res["out"], date.fromisoformat(res["today"]))
+    if res["out"]:
+        head = "Out on loan\n" + table(
+            [[l["name"], l.get("age"), l["club"]["name"], l.get("start_date"), l.get("end_date"), l["apps"],
+              "no matches yet" if l["rating"] is None else f"{l['rating']:.2f}", l.get("agreed_time"),
+              l.get("actual_time")] for l in res["out"]],
+            ["name", "age", "club", "from", "to", "apps", "rating", "agreed time", "actual time"])
+    else:
+        head = "Out on loan: none"
+    text = (head + "\n" + loans_mod.intake_line(res.get("intake"))
+            + (f"\nFlagged (no appearances {loans_mod.UNUSED_AFTER_DAYS}+ days into the loan): "
+               + ", ".join(l["name"] for l in flagged) if flagged else ""))
+    emit(st, {**res, "flagged": flagged}, text)
+
+
 def _depth_for(team: str = "first") -> dict:
     s = squad_mod.normalize(FmClient().call("squad", team=team))
     return depth_mod.depth(s["players"], depth_mod.load_minimums(depth_mod.USER_DEPTH))
@@ -249,6 +342,22 @@ def squad_depth(st, team):
     need_hello(st)
     res = _depth_for(team)
     emit(st, res, depth_text(res))
+
+
+@main.command()
+@click.option("--n", type=click.IntRange(1, 10), default=5, show_default=True, help="Upcoming fixtures to read.")
+@click.pass_obj
+def fixtures(st, n):
+    """Next fixtures, the assistant's note on the next opponent and its most used formation."""
+    need_hello(st)
+    res = FmClient().call("fixtures", n=n)
+    today = date.fromisoformat(res["today"])
+
+    def with_days(f):
+        return f and {**f, "days_until": fixtures_mod.days_until(f, today)}
+
+    out = {**res, "next": with_days(res.get("next")), "upcoming": [with_days(f) for f in res.get("upcoming") or []]}
+    emit(st, out, fixtures_mod.text(res))
 
 
 @main.group()

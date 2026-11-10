@@ -11,6 +11,11 @@
       "Bash(fm --json squad watch*)",
       "Bash(fm --json squad depth*)",
       "Bash(fm --json players targets*)",
+      "Bash(fm --json briefing)",
+      "Bash(fm --json fixtures*)",
+      "Bash(fm --json squad contracts*)",
+      "Bash(fm --json squad form*)",
+      "Bash(fm --json squad loans)",
       "Bash(fm --json players search*)",
       "Bash(fm --json training show*)",
       "Bash(fm --json training load)"

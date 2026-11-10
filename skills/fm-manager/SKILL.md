@@ -1,6 +1,6 @@
 ---
 name: fm-manager
-description: Use when the owner asks about their Football Manager 27 career — staff to hire or staff vacancies, players to scout or buy, thin positions, expiring contracts, injuries, budget, squad fitness, training load — or runs /fm-staff-search, /fm-scout, /fm-training, /fm-vacancies, /fm-watch, /fm-depth.
+description: Use when the owner asks about their Football Manager 27 career — staff to hire or staff vacancies, players to scout or buy, thin positions, contracts, injuries, form, next opponent, loans, a session briefing, budget, squad fitness, training load — or runs /fm-staff-search, /fm-scout, /fm-training, /fm-vacancies, /fm-watch, /fm-depth, /fm-briefing.
 ---
 
 # FM Assistant Manager
@@ -24,6 +24,11 @@ Answer in Indonesian. Never tactics, never decide for the owner.
 | Staff vacancies ("lowongan") | `club budget`, `staff vacancies` |
 | Contracts ending / injuries | `squad watch` (`--within 365` when asked about the whole season) |
 | Thin positions / scouting targets | `club budget`, `squad depth`, `players targets` |
+| Briefing / "ada apa hari ini" | `briefing` (then the detail command the owner picks) |
+| Form, who is playing badly, unhappy players | `squad form` |
+| Next opponent / fixtures | `fixtures` |
+| Contract priorities, squad status, wage structure | `club budget`, `squad contracts`, `squad form` (ratings) |
+| Loans out, youth intake | `squad loans` |
 
 Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `physio`, etc.
 
@@ -53,6 +58,24 @@ Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `phy
 - Depth: `min` is the owner's minimum per position (default 2, `~/.fm-assistant/depth.json`), not a formation.
   A player counts in every position he can play; `fit` excludes injured players. A thin position the owner's
   formation does not use (e.g. WB) is not a need: say so once and that `min` can be set to 0 for it.
+- Dates: `today` is the in-game date; never compare with the real calendar.
+- Briefing: short bullets, most urgent first, no big tables. `vacancies_open` = open staff slots (details:
+  `staff vacancies`). `loans_flagged` = loanees with 0 competitive appearances ≥ 21 days after the loan
+  started; loan stats count competitive matches only, so early in the season this is normal: say so.
+  `intake_days` = days to the youth intake. A part `{"error": ...}` → say that part could not be read.
+- Form: `rating` = season average over all matches incl. friendlies; `last5_rating` / `last5_minutes` = the
+  last five club matches. `low_form` = last-five rating < 6.5 with ≥ 3 apps; `unused` = 0 apps while others
+  played. `rating: null` → "belum main", never 0. Under 3 matches or under 180 minutes (either one) is too small to call a trend:
+  say so instead of ranking drops. Nothing flagged → say "tidak ada yang ditandai" first.
+- Fixtures: `threat` is the game assistant's sentence: quote it. `opponent_formation` is a fact about the
+  opponent; never turn it into tactics or lineup advice. `home: null` → venue unknown.
+- Contracts: `squad_status.display` is the player's agreed status. `advised_max` = the game's wage-structure
+  advice for that status text (null when the text is ambiguous). The game's wage table groups players its own
+  way (its counts do not match the squad's statuses), so say "saran gaji untuk status X", never "batas gaji
+  pemain ini". The last `wage_structure` row is the total. `release_clause: null` = no clause.
+  "Priority" is the owner's call: present end date, status, wage vs `advised_max`, age, rating; do not rank.
+- Loans: `happiness` is the game's number (no scale given: quote, don't judge). `agreed_time` /
+  `actual_time` null = not reported yet.
 - Targets: already within budget (known price ≤ transfer budget, known wage ≤ wage room); `budget_unknown`
   rows go in a separate list. Order = budget known first, then younger: it is NOT a quality ranking. There is
   no score: never invent one; quote `scout_rating` and say that scout reports decide quality. Each target fits
@@ -67,7 +90,8 @@ Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `phy
 3. Per pick (top 1–2): one reason tied to numbers from the table.
 4. One or two alternatives and when to prefer them.
 5. **Langkah manual di game:** numbered steps naming the screens: KLUB → Staf → Cari Staf (staff);
-   REKRUTMEN → Database Pemain (players); LATIHAN (training); SKUAD → Kontrak (contracts). End with "kabari saya setelahnya, saya cek ulang".
+   REKRUTMEN → Database Pemain (players); LATIHAN (training); SKUAD → Kontrak (contracts); for fixtures,
+   loans and form name the topic ("jadwal laga", "pemain pinjaman") rather than guessing a screen name. End with "kabari saya setelahnya, saya cek ulang".
 
 The owner says "langsung rekrut / ubah saja": reply that hiring, bidding and changing training are not
 available yet (actions come in a later version), then give step 5. Never write that something was done.

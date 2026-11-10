@@ -1,39 +1,80 @@
 {
- "uid": 900001,
- "name": "Pantai Utara FC",
- "balance": {
-  "display": "Rp1,2M",
-  "value": 1200000
- },
- "financial_status": "Oke",
- "transfer_budget": {
-  "display": "Rp239Jt",
-  "value": 239000
- },
- "wage_budget": {
-  "display": "Rp410Jt p/mgg",
-  "value": 41000
- },
- "wage_committed": {
-  "display": "Rp380Jt p/mgg",
-  "value": 38000
- },
- "wage_remaining": {
-  "display": "Rp72Jt",
-  "value": 3000
- },
- "staff_slots": {
-  "coaching": {
-   "used": 7,
-   "max": 9
+  "uid": 900001,
+  "name": "Pantai Utara FC",
+  "balance": {
+    "display": "Rp1,2M",
+    "value": 1200000
   },
-  "recruitment": {
-   "used": 2,
-   "max": 4
+  "financial_status": "Oke",
+  "transfer_budget": {
+    "display": "Rp239Jt",
+    "value": 239000
   },
-  "medical": {
-   "used": 1,
-   "max": 3
-  }
- }
+  "wage_budget": {
+    "display": "Rp410Jt p/mgg",
+    "value": 41000
+  },
+  "wage_committed": {
+    "display": "Rp380Jt p/mgg",
+    "value": 38000
+  },
+  "wage_remaining": {
+    "display": "Rp72Jt",
+    "value": 3000
+  },
+  "staff_slots": {
+    "coaching": {
+      "used": 7,
+      "max": 9
+    },
+    "recruitment": {
+      "used": 2,
+      "max": 4
+    },
+    "medical": {
+      "used": 1,
+      "max": 3
+    }
+  },
+  "wage_structure": [
+    {
+      "status": "Key Player",
+      "count": 2,
+      "average": "Rp30Jt p/mgg",
+      "highest": "Rp40Jt p/mgg",
+      "lowest": "Rp20Jt p/mgg",
+      "advised_max": "Rp35Jt p/mgg",
+      "total": {
+        "display": "Rp60Jt p/mgg",
+        "value": 2400
+      },
+      "over": true
+    },
+    {
+      "status": "Rotation",
+      "count": 1,
+      "average": "Rp12Jt p/mgg",
+      "highest": "Rp12Jt p/mgg",
+      "lowest": "Rp12Jt p/mgg",
+      "advised_max": "Rp15Jt p/mgg",
+      "total": {
+        "display": "Rp12Jt p/mgg",
+        "value": 500
+      },
+      "over": false
+    },
+    {
+      "status": "Backup",
+      "count": 0,
+      "average": "-",
+      "highest": "-",
+      "lowest": "-",
+      "advised_max": "-",
+      "total": {
+        "display": "-",
+        "value": 0
+      },
+      "over": null
+    }
+  ]
 }

@@ -18,7 +18,8 @@ SESSION_PATH = Path.home() / ".fm-assistant" / "session.json"
 # reported by the plugin (or as "timeout"), never as "game not running".
 OP_TIMEOUTS = {"hello": 10, "diag": 5, "dev_reload": 30, "panels": 10, "ui_dump": 10, "prop_check": 10, "tree": 10,
                "read": 60, "list_rows": 15, "load_recent_save": 10, "nav_open": 30, "club": 30, "squad": 90,
-               "staff_search": 90, "player_search": 90, "training": 60}
+               "staff_search": 90, "player_search": 90, "training": 60,
+               "form": 90, "fixtures": 60, "loans": 60}
 
 
 class FmUnavailable(Exception):

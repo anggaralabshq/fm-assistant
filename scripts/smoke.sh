@@ -18,9 +18,14 @@ run() {
 run doctor
 run game status
 run club budget
+run briefing
+run fixtures
 run squad list
 run squad watch
 run squad depth
+run squad contracts
+run squad form
+run squad loans
 run staff search --role scout --top 5
 run staff slots
 run staff vacancies --top 2

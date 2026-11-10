@@ -130,6 +130,38 @@ internal static class Reader
 
     public static uint Id(string name) => PropertyIdentifierSet.Instance.GetID(Il2CppSystem.MemoryExtensions.AsSpan(name)).ID;
 
+    /// Main thread. The value under `field` in each record of the list held by `list`, in list order (at most `max`);
+    /// null where the entry is not a record, lacks the field, or holds a null reference. Values inside list records
+    /// can be UI references with no uid (FixtureReference), so callers plant on these values directly (ReadMany).
+    public static List<TypedValue> ListField(TypedValue list, string field, int max = 200)
+    {
+        var res = new List<TypedValue>();
+        Il2CppSystem.Collections.IList l = null;
+        try { l = list?.Get()?.TryCast<Il2CppSystem.Collections.IList>(); } catch { }
+        if (l == null) return res;
+        var id = Id(field);
+        var n = Math.Min(l.Cast<Il2CppSystem.Collections.ICollection>().Count, max);  // indexer only, never foreach
+        for (var i = 0; i < n; i++)
+        {
+            TypedValue v = null;
+            try
+            {
+                var rec = l[i]?.TryCast<TypedValue>()?.Get()?.TryCast<Record>();
+                if (rec != null && rec.TryGetValue(id, out var kv)) v = kv;
+            }
+            catch { }
+            res.Add(IsNullRef(v) ? null : v);
+        }
+        return res;
+    }
+
+    /// Main thread. True for a missing value or the game's NullReference placeholder (e.g. a friendly's competition).
+    public static bool IsNullRef(TypedValue v)
+    {
+        if (v == null) return true;
+        try { return (v.AsString() ?? "").EndsWith("NullReference", StringComparison.Ordinal); } catch { return true; }
+    }
+
     // ------------------------------------------------------------ main thread
 
     internal static Plant PlantOne(TypedValue parent, string[] props, List<Plant> owner = null)
