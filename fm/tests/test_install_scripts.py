@@ -1,7 +1,10 @@
 """scripts/install.sh and scripts/uninstall.sh against fake folders (never the real game, Steam or ~/.claude)."""
 import os
+import platform
 import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).parents[2]
 
@@ -12,6 +15,7 @@ def sh(script, tmp, *args, **env):
     return subprocess.run(["bash", str(ROOT / "scripts" / script), *args], env=e, capture_output=True, text=True)
 
 
+@pytest.mark.skipif(platform.machine() != "arm64" or platform.system() != "Darwin", reason="install.sh checks Apple Silicon first")
 def test_install_fails_closed_without_game_or_loader(tmp_path):
     r = sh("install.sh", tmp_path)
     assert r.returncode == 1 and "FM27 not found" in r.stderr
@@ -45,3 +49,9 @@ def test_uninstall_removes_only_ours_and_keeps_backups(tmp_path):
     assert sorted(p.name for p in cmds.iterdir()) == ["mine.md"]
     assert sorted(p.name for p in data.iterdir()) == ["backups"]
     assert "backups" in r.stdout
+
+
+def test_empty_home_refused(tmp_path):
+    for s in ("install.sh", "uninstall.sh"):
+        r = sh(s, tmp_path, HOME="", FM27_GAME="", CLAUDE_DIR="")
+        assert r.returncode != 0 and "HOME" in r.stderr, (s, r.stderr)

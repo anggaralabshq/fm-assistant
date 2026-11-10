@@ -4,6 +4,7 @@
 #   --no-skill  skip copying the skill and slash commands into ~/.claude
 #   --mcp       also install the MCP server (fm-mcp)
 set -euo pipefail
+: "${HOME:?HOME must be set}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GAME="${FM27_GAME:-$HOME/Library/Application Support/Steam/steamapps/common/Football Manager 27}"
 LOADER="$GAME/FM27-BepInEx"
@@ -28,6 +29,7 @@ echo "1/3 plugin"
 FM27_BEP="$LOADER/BepInEx" DOTNET="$DOTNET" bash "$ROOT/plugin/build.sh"
 echo "2/3 fm CLI"
 "$UV" tool install --force --quiet "$ROOT/fm$EXTRA"
+command -v fm >/dev/null || echo "    fm is installed in $("$UV" tool dir --bin) which is not on PATH: run 'uv tool update-shell' and open a new terminal"
 if [ "$SKILL" = 1 ]; then
   echo "3/3 Claude Code skill"
   mkdir -p "$CLAUDE_DIR/skills" "$CLAUDE_DIR/commands"

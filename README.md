@@ -74,7 +74,8 @@ Needs an Apple Silicon Mac, FM27 on Steam, [uv](https://docs.astral.sh/uv/) and 
    without prompts, every `fm apply` asks you first.
 
 Uninstall: `bash scripts/uninstall.sh` (quit the game first). It removes the plugin, CLI and skill and keeps your
-save backups in `~/.fm-assistant/backups`; `--purge` also removes plans, the audit log and snapshots.
+save backups in `~/.fm-assistant/backups`; `--purge` also removes everything else in `~/.fm-assistant` (plans,
+audit log, snapshots, your `depth.json` / `staff_roles.json` overrides).
 
 Back up your save folder before trying anything new; the loader is third-party.
 
