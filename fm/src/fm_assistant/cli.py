@@ -7,6 +7,7 @@ import click
 from datetime import date, timedelta
 
 from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
+from . import contracts as contracts_mod
 from . import depth as depth_mod
 from . import vacancies as vacancies_mod
 from . import doctor as doctor_mod
@@ -226,6 +227,29 @@ def squad_watch(st, within, team):
                       "?" if i["matches_missed"] is None else (f"≥{i['matches_missed']}" if i["beyond_view"] else i["matches_missed"])]
                      for i in inj], ["name", "injury", "back", "matches missed"]))
     emit(st, {"today": today.isoformat(), "expiring": exp, "injured": inj}, text)
+
+
+@squad.command("contracts")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_contracts(st, team):
+    """Contract end, squad status, release clause and the game's advised wage cap per status."""
+    need_hello(st)
+    c = FmClient()
+    s = c.call("squad", team=team)
+    structure = c.call("club")["wage_structure"]
+    today = date.fromisoformat(s["today"])
+    rows = contracts_mod.table(s["players"], structure, today)
+    flag = {True: "yes", False: "no", None: "?"}
+    text = (table([[r["name"], r["age"], (r["squad_status"] or {}).get("display"), r["end_date"], r["days_left"],
+                    budget.fmt(r["wage"]), budget.fmt(r["release_clause"]) if r["release_clause"] else "none",
+                    flag[r["renewal_offer"]], r["advised_max"]] for r in rows],
+                   ["name", "age", "status", "ends", "days left", "wage", "release", "renewal offer", "advised max"])
+            + "\n\nWage structure\n"
+            + table([[w["status"], w["count"], w["average"], w["highest"], w["lowest"], w["advised_max"],
+                      w["total"]["display"], flag[w["over"]]] for w in structure],
+                    ["status", "count", "average", "highest", "lowest", "advised max", "total", "over"]))
+    emit(st, {"today": today.isoformat(), "players": rows, "wage_structure": structure}, text)
 
 
 def _depth_for(team: str = "first") -> dict:

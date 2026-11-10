@@ -27,7 +27,17 @@
           "value": 1128
         },
         "end_date": "2028-06-30",
-        "length_days": 600
+        "length_days": 600,
+        "start_date": "2025-07-01",
+        "squad_status": {
+          "display": "Key Player",
+          "code": 23
+        },
+        "release_clause": {
+          "display": "Rp5Mi",
+          "value": 5000000000
+        },
+        "renewal_offer": false
       }
     },
     {
@@ -47,7 +57,14 @@
           "value": 500
         },
         "end_date": "2027-06-30",
-        "length_days": 230
+        "length_days": 230,
+        "start_date": "2024-07-01",
+        "squad_status": {
+          "display": "Rotation",
+          "code": 21
+        },
+        "release_clause": null,
+        "renewal_offer": null
       }
     },
     {
@@ -65,7 +82,14 @@
           "value": 330
         },
         "end_date": "2026-12-31",
-        "length_days": 50
+        "length_days": 50,
+        "start_date": "2026-01-01",
+        "squad_status": {
+          "display": "Prospect",
+          "code": 17
+        },
+        "release_clause": null,
+        "renewal_offer": true
       },
       "injury": {
         "description": "Hamstring strain",
