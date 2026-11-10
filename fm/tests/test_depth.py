@@ -97,3 +97,22 @@ def test_squad_depth_cli(monkeypatch, tmp_path):
     r = run("squad", "depth")
     assert r.exit_code == 0, r.output + r.stderr
     assert "GK" in r.stdout and "0/2" in r.stdout and "Tanpa Posisi" in r.stdout
+
+
+def test_players_targets_drop_own_club_players(monkeypatch, tmp_path):
+    monkeypatch.setattr(depth, "USER_DEPTH", tmp_path / "none.json")
+    squad = [P(f"Pemain {i}", m) for i, m in enumerate([1, 1, 16, 16, 16384, 16384])]
+    # Eko Saputra (AM (C), club 900555) is the owner's own player in this test
+    fake_calls(monkeypatch, {"hello": HELLO, "squad": {"club": {"uid": 900555}, "count": 6, "players": squad},
+                             "club": fixture("club.json"), "player_search": fixture("player_search.json")})
+    out = json.loads(run("--json", "players", "targets", "--max", "50").stdout)["result"]
+    assert out["targets"]["AM (C)"] == []
+
+
+def test_players_targets_text_shows_scout_column(monkeypatch, tmp_path):
+    monkeypatch.setattr(depth, "USER_DEPTH", tmp_path / "none.json")
+    squad = [P(f"Pemain {i}", m) for i, m in enumerate([1, 1, 16, 16, 16384, 16384])]
+    fake_calls(monkeypatch, {"hello": HELLO, "squad": {"count": 6, "players": squad},
+                             "club": fixture("club.json"), "player_search": fixture("player_search.json")})
+    r = run("players", "targets", "--max", "50")
+    assert "scout" in r.stdout.split("AM (C) (fit")[1].splitlines()[1]

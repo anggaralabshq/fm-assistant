@@ -54,7 +54,9 @@ Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `phy
   A player counts in every position he can play; `fit` excludes injured players. A thin position the owner's
   formation does not use (e.g. WB) is not a need: say so once and that `min` can be set to 0 for it.
 - Targets: already within budget (known price ≤ transfer budget, known wage ≤ wage room); `budget_unknown`
-  rows go in a separate list. Order = budget known first, then younger. There is no score: never invent one.
+  rows go in a separate list. Order = budget known first, then younger: it is NOT a quality ranking. There is
+  no score: never invent one; quote `scout_rating` and say that scout reports decide quality. Each target fits
+  the budget on its own, not together with the others. `searched.truncated: true` → apply the truncation rule.
   `wage` is the Player Database estimate, not a demand; `asking_price: null` → quote `value`.
 
 ## Answer shape

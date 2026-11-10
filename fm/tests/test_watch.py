@@ -67,3 +67,10 @@ def test_squad_watch_json_shape(monkeypatch):
     assert res["injured"][0]["return_date"] == "2026-08-05"
     assert res["injured"][0]["matches_missed"] == 1
     assert ("squad", {"team": "first"}) in calls
+
+
+def test_squad_watch_non_first_team_has_no_match_counts(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "squad": fixture("squad.json"), "training": fixture("training.json")})
+    res = json.loads(run("--json", "squad", "watch", "--team", "reserve").stdout)["result"]
+    assert res["injured"] and all(i["matches_missed"] is None and i["beyond_view"] is False for i in res["injured"])
+    assert res["injured"][0]["return_date"] == "2026-08-05"

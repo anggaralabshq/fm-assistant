@@ -216,6 +216,8 @@ def squad_watch(st, within, team):
     days, _ = _training_days()
     exp = watch_mod.expiring(s["players"], today, within)
     inj = watch_mod.injuries(s["players"], today, days)
+    if team != "first":  # the training calendar is the first team's: its matches are not this team's
+        inj = [{**i, "matches_missed": None, "beyond_view": False} for i in inj]
     text = ("Contracts ending within %d days\n" % within
             + table([[e["name"], e["age"], e["end_date"], e["days_left"], budget.fmt(e["wage"])] for e in exp],
                     ["name", "age", "ends", "days left", "wage"])
@@ -292,7 +294,9 @@ def staff_vacancies(st, top):
     c = FmClient()
     club_ = c.call("club")
     res = c.call("staff_search", max=1000)
-    jobs = vacancies_mod.fill(vacancies_mod.open_jobs(club_), res, roles, job_roles, top)
+    own = club_.get("uid")  # the Staff Search filter may include the club's own staff
+    pool = {**res, "rows": [r for r in res["rows"] if own is None or r.get("club_uid") != own]}
+    jobs = vacancies_mod.fill(vacancies_mod.open_jobs(club_), pool, roles, job_roles, top)
     blocks = []
     for j in jobs:
         head = f"{j['job']}: {j['open']} open" + (f" — {j['summary']}" if j.get("summary") else "")
@@ -342,19 +346,22 @@ def players_targets(st, top, max_):
     """Affordable scouting targets for each thin position slot of the first team."""
     need_hello(st)
     c = FmClient()
-    res = _depth_for("first")
+    sq = squad_mod.normalize(c.call("squad", team="first"))
+    res = depth_mod.depth(sq["players"], depth_mod.load_minimums(depth_mod.USER_DEPTH))
     thin = [s for s in res["slots"] if s["thin"]]
     found = players_mod.normalize(c.call("player_search", max=max_))
     club_ = c.call("club")
-    rows = players_mod.affordable(found["rows"], club_["transfer_budget"]["value"], budget.wage_headroom(club_))
+    own = (sq.get("club") or {}).get("uid")  # the Player Database filter may include the owner's own club
+    others = [r for r in found["rows"] if own is None or r.get("club_uid") != own]
+    rows = players_mod.affordable(others, club_["transfer_budget"]["value"], budget.wage_headroom(club_))
     picked = depth_mod.targets(thin, rows, top)
     out = {**res, "targets": picked, "searched": {k: found.get(k) for k in ("count", "returned", "truncated")}}
     parts = [depth_text(res)]
     for s in thin:
         parts.append(f"\n{s['slot']} (fit {s['fit']}/{s['min']})")
         parts.append(table([[p["name"], p.get("age"), p["position"], budget.fmt(p.get("asking_price") or p.get("value")),
-                             budget.fmt(p.get("wage")), "budget?" if p["budget_unknown"] else ""]
-                            for p in picked[s["slot"]]], ["name", "age", "position", "price", "wage", ""])
+                             budget.fmt(p.get("wage")), p.get("scout_rating"), "budget?" if p["budget_unknown"] else ""]
+                            for p in picked[s["slot"]]], ["name", "age", "position", "price", "wage", "scout", ""])
                      if picked[s["slot"]] else "no affordable candidates")
     parts.append(f"\n{shown(found)}, {len(rows)} affordable")
     emit(st, out, "\n".join(parts))

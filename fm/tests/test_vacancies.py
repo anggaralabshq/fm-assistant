@@ -99,3 +99,11 @@ def test_staff_vacancies_text_warns_when_no_row_prefers_the_job(monkeypatch):
     assert r.exit_code == 0, r.output
     physio = r.stdout.split("Fisioterapis")[1]
     assert "0 of 2 searched staff prefer this job" in physio.split("\n\n")[0]
+
+
+def test_staff_vacancies_drop_own_club_staff(monkeypatch):
+    club = {**fixture("club_jobs.json"), "uid": 900001}
+    fake_calls(monkeypatch, {"hello": HELLO, "club": club,
+                             "staff_search": staff_res([row(1, 14, 20, club_uid=900001), row(2, 14, 9, club_uid=None)])})
+    j = json.loads(run("--json", "staff", "vacancies").stdout)["result"]
+    assert all(c["uid"] != 1 for job in j["jobs"] for c in job["candidates"])
