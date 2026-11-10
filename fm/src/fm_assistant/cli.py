@@ -12,6 +12,7 @@ from . import depth as depth_mod
 from . import briefing as briefing_mod
 from . import fixtures as fixtures_mod
 from . import stars as stars_mod
+from . import rolefit as rolefit_mod
 from . import inbox as inbox_mod
 from . import form as form_mod
 from . import loans as loans_mod
@@ -389,6 +390,17 @@ def fixtures(st, n):
 
     out = {**res, "next": with_days(res.get("next")), "upcoming": [with_days(f) for f in res.get("upcoming") or []]}
     emit(st, out, fixtures_mod.text(res))
+
+
+@main.command("tactic")
+@click.pass_obj
+def tactic_cmd(st):
+    """The active tactic: slots, roles and who plays them, with position fit and condition facts (no advice)."""
+    need_hello(st)
+    c = FmClient()
+    t = c.call("tactic")
+    rows = rolefit_mod.check(t, c.call("squad", team="first"))
+    emit(st, {**t, "fit": rows}, rolefit_mod.text(t, rows, table))
 
 
 @main.group()
