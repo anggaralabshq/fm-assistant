@@ -37,6 +37,16 @@ if unmatched:
     print(f"note: statuses with no wage_structure row: {unmatched}")
 codes = sorted({r["squad_status"]["code"] for r in rows if r["squad_status"]})
 print(f"squad_status codes seen: {codes}")
+# The game's wage table groups players its own way: a status with fewer table rows than first-team players
+# means advised_max is advice for the status text, not the group the game counts the player in (review I1).
+from collections import Counter
+squad_n = Counter(((p.get("contract") or {}).get("squad_status") or {}).get("display") for p in squad["players"])
+table_n = Counter()
+for w in structure[:-1]:  # last row = club total
+    table_n[w["status"]] += w.get("count") or 0
+drift = {k: (table_n.get(k, 0), n) for k, n in squad_n.items() if k and table_n.get(k, 0) < n}
+if drift:
+    print(f"note: wage table count < first-team count for {len(drift)} status(es) (table, squad): {drift}")
 if errors:
     print("FAIL:\n  " + "\n  ".join(errors[:30]))
     sys.exit(1)

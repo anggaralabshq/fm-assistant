@@ -265,7 +265,7 @@ def squad_contracts(st, team):
     text = (table([[r["name"], r["age"], (r["squad_status"] or {}).get("display"), r["end_date"], r["days_left"],
                     budget.fmt(r["wage"]), budget.fmt(r["release_clause"]) if r["release_clause"] else "none",
                     flag[r["renewal_offer"]], r["advised_max"]] for r in rows],
-                   ["name", "age", "status", "ends", "days left", "wage", "release", "renewal offer", "advised max"])
+                   ["name", "age", "status", "ends", "days left", "wage", "release", "renewal offer", "advice for status"])
             + "\n\nWage structure\n"
             + table([[w["status"], w["count"], w["average"], w["highest"], w["lowest"], w["advised_max"],
                       w["total"]["display"], flag[w["over"]]] for w in structure],

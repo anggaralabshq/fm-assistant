@@ -74,3 +74,9 @@ def test_advised_max_null_when_status_text_is_ambiguous():
     structure = [{"status": "Cadangan Darurat", "advised_max": "Rp1Jt"}, {"status": "Cadangan Darurat", "advised_max": "Rp2Jt"}]
     p = {"uid": 1, "name": "Budi Santoso", "contract": {"end_date": "2027-06-30", "squad_status": {"display": "Cadangan Darurat", "code": 24}}}
     assert contracts.table([p], structure, date(2026, 8, 3))[0]["advised_max"] is None
+
+
+def test_squad_contracts_text_labels_advice_by_status_not_player(monkeypatch):
+    fake_calls(monkeypatch, {"hello": HELLO, "squad": fixture("squad.json"), "club": fixture("club.json")})
+    r = run("squad", "contracts")
+    assert "advice for status" in r.stdout.splitlines()[0]

@@ -69,9 +69,10 @@ Role keys: `staff search --role nope` lists them. Scout = `scout`, physio = `phy
   say so instead of ranking drops. Nothing flagged → say "tidak ada yang ditandai" first.
 - Fixtures: `threat` is the game assistant's sentence: quote it. `opponent_formation` is a fact about the
   opponent; never turn it into tactics or lineup advice. `home: null` → venue unknown.
-- Contracts: `squad_status.display` is the game's status; `advised_max` = the game's wage-structure guidance
-  for that status (display text; null when the status text is ambiguous). In `wage_structure` the last row is
-  the club total, and counts cover the whole club, not one team. `release_clause: null` = no clause.
+- Contracts: `squad_status.display` is the player's agreed status. `advised_max` = the game's wage-structure
+  advice for that status text (null when the text is ambiguous). The game's wage table groups players its own
+  way (its counts do not match the squad's statuses), so say "saran gaji untuk status X", never "batas gaji
+  pemain ini". The last `wage_structure` row is the total. `release_clause: null` = no clause.
   "Priority" is the owner's call: present end date, status, wage vs `advised_max`, age, rating; do not rank.
 - Loans: `happiness` is the game's number (no scale given: quote, don't judge). `agreed_time` /
   `actual_time` null = not reported yet.
