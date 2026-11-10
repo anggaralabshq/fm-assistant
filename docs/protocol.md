@@ -61,6 +61,7 @@ Rules enforced by the plugin:
 
 | `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots}`; see below | main + polling |
 | `squad` | `team=first\|reserve\|youth` | `{club, team: {uid, name, kind}, count, players: [Player]}`; see below | main + polling |
+| `staff_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Staff]}`; opens `StaffSearchReport` itself | main + polling |
 
 There is no generic click op. Discovery ops are read-only.
 
@@ -93,6 +94,19 @@ players read about −360…−270 on build 27.0.0.2493426, higher = more tired;
 `FullContract` → `Wage` (`{display, sort}` → Money), `EndDate`, `ContractLength` (days left).
 `Player = {uid, name, age, position_mask, attributes, condition, fatigue, injured, injury: {description,
 return_days}|null, contract: {wage, end_date, length_days}}`.
+
+### staff_search
+
+Rows = every backing row of `StaffSearchReport > nonplayertable` (person refs, the table's current filter), read in
+batches of 20 (166 rows ≈ 5 s). Props: `Name`, `Age`, `Club` (null = free agent), `PreferredJob` (`JobString`,
+`JobType`), `FullContract.Wage` (→ `current_wage`, null when 0/"T/A"), and staff attributes without prefix:
+`Attacking, Defending, Tactical, Technical, SetPieces, CoachingFitness, GoalkeepingCoaching, WorkingWithYoungster,
+TacticalKnowledge, JudgingPlayerAbility, JudgingPlayerPotential, JudgingStaffAbility, PeopleManagement, Motivating,
+Adaptability, Determination, Authority, Physiotherapy, SportsScience, Negotiating, AnalysingData`.
+`Authority` is assumed to be the profile's level of discipline. Not found: mental coaching (tried ~30 names).
+Wage demand: no person property found (`WageDemand`, `ExpectedWage`, `ContractDemand`, … unknown), so
+`wage_demand` is always null; the demand only appears in the contract-offer flow (Phase 2).
+`Staff = {uid, name, age, club_uid, preferred_job, preferred_job_type, attributes, current_wage, wage_demand}`.
 
 ## Navigation routes (nav_open)
 

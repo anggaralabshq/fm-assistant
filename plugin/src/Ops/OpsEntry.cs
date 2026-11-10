@@ -18,5 +18,6 @@ internal static class OpsEntry
         ["nav_open"] = (Nav.Open, 30),
         ["club"] = (Club.Read, 30),
         ["squad"] = (Squad.Read, 90),
+        ["staff_search"] = (Staff.Search, 90),
     };
 }

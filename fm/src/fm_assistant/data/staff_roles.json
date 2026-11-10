@@ -2,6 +2,8 @@
   "coach_attacking": {"Attacking": 3, "Technical": 2, "Tactical": 1, "Determination": 1, "Motivating": 1},
   "coach_defending": {"Defending": 3, "Tactical": 2, "Technical": 1, "Determination": 1, "Motivating": 1},
   "coach_fitness": {"CoachingFitness": 3, "SportsScience": 1, "Determination": 1, "Motivating": 1},
+  "coach_goalkeeping": {"GoalkeepingCoaching": 3, "Determination": 1, "Motivating": 1},
+  "coach_youth": {"WorkingWithYoungster": 3, "Technical": 1, "Tactical": 1, "Motivating": 1},
   "scout": {"JudgingPlayerAbility": 3, "JudgingPlayerPotential": 3, "Adaptability": 1},
   "recruitment_analyst": {"JudgingPlayerAbility": 2, "JudgingPlayerPotential": 2, "AnalysingData": 2},
   "performance_analyst": {"AnalysingData": 3, "TacticalKnowledge": 2},

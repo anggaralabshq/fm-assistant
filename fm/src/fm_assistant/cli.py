@@ -215,8 +215,8 @@ def staff_search(st, role, max_wage, max_, top):
     ranked = staff_mod.rank(res["rows"], role, max_wage, roles)[:top]
     out = {**res, "role": role, "rows": ranked}
     emit(st, out, table([[s["score"], s["name"], s.get("age"), s.get("preferred_job"),
-                          budget.fmt(s.get("wage_demand")), "" if max_wage is None else {True: "over", False: "ok", None: "?"}[s["over_budget"]]]
-                         for s in ranked], ["score", "name", "age", "job", "wage demand", "budget"])
+                          budget.fmt(s.get("wage_demand")), budget.fmt(s.get("current_wage")), "" if max_wage is None else {True: "over", False: "ok", None: "?"}[s["over_budget"]]]
+                         for s in ranked], ["score", "name", "age", "job", "wage demand", "current wage", "budget"])
          + f"\n{shown(res)}")
 
 
