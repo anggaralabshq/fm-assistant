@@ -182,7 +182,7 @@ internal static class Nav
 
     /// Navigation only from the normal game screens: the title bar's tab menu must be showing. Refuses during
     /// matches, press conferences, full-screen dialogs or the main menu, where a tab click could change state.
-    private static R<bool> OnGameScreens()
+    internal static R<bool> OnGameScreens()
     {
         var bar = Ui.OpenPanels().Find(p => Ui.PanelId(p) == "OverviewTitleBar");
         UnityEngine.UIElements.VisualElement menu = null;

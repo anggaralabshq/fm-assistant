@@ -152,21 +152,105 @@ internal static class Meta
             "club" => () => Reader.ClubRef(uid),
             "team" => () => Reader.TeamRef(uid),
             "path" => () => FmAssistant.Tree.Find(path)?.Value,
-            _ => throw new OpException("bad-request", "ref must be person|club|team|path"),
+            "persons" => null,
+            _ => throw new OpException("bad-request", "ref must be person|club|team|path|persons"),
+        };
+        // "ctx": {"team": {"ref": "team", "uid": 1} | {"path": "Human.Team"}, "human": {"path": "Human"}}
+        var ctxSpec = new List<(string Name, Func<TypedValue> Val)>();
+        if (a["ctx"] is JsonObject cx)
+            foreach (var kv in cx)
+            {
+                if (kv.Value is not JsonObject spec) throw new OpException("bad-request", "ctx values must be objects");
+                var cuid = Int(spec, "uid", 0);
+                var cpath = Str(spec, "path");
+                var ckind = Str(spec, "ref") ?? "path";
+                Func<TypedValue> f = ckind switch
+                {
+                    "person" => () => Reader.PersonRef(cuid),
+                    "club" => () => Reader.ClubRef(cuid),
+                    "team" => () => Reader.TeamRef(cuid),
+                    "path" => () => FmAssistant.Tree.Find(cpath ?? "")?.Value,
+                    "int" => () => TypedValue.Create(cuid),
+                    "bool" => () => TypedValue.Create(cuid != 0),
+                    "string" => () => TypedValue.Create(Str(spec, "value") ?? ""),
+                    _ => throw new OpException("bad-request", "ctx ref must be person|club|team|path|int|bool|string"),
+                };
+                ctxSpec.Add((kv.Key, f));
+            }
+        Func<Dictionary<string, TypedValue>> ctx = ctxSpec.Count == 0 ? null : () =>
+        {
+            var d = new Dictionary<string, TypedValue>();
+            foreach (var (n, f) in ctxSpec) d[n] = f();
+            return d;
         };
         var chain = new List<(string Prop, string[] Sub)>();
         if (a["chain"] is JsonObject ch)
             foreach (var kv in ch) chain.Add((kv.Key, Strs(ch, kv.Key)));
 
         await using var scope = new ReadScope(ct);
-        var plant = await scope.ReadOne(parent, props, wait);
+        if (kind == "persons")  // spike: {"ref": "persons", "uids": [...]} -> rows
+        {
+            var uids = ((a["uids"] as JsonArray) ?? new JsonArray()).Select(n => (int)n).Take(500).ToList();
+            var t0 = Environment.TickCount64;
+            var ps = await scope.ReadMany(uids.ConvertAll<Func<TypedValue>>(u => () => Reader.PersonRef(u)), props, wait, ctx);
+            var rows = await scope.Collect(ps);
+            var arr = new JsonArray();
+            for (var i = 0; i < rows.Count; i++) { rows[i]["uid"] = uids[i]; arr.Add(rows[i]); }
+            return new JsonObject { ["ms"] = Environment.TickCount64 - t0, ["rows"] = arr };
+        }
+        var plant = await scope.ReadOne(parent, props, wait, ctx);
         var json = (await scope.Collect(new List<Plant> { plant }))[0];
         foreach (var (prop, sub) in chain)
         {
             var v = plant[prop]?.Value;
-            var cp = await scope.ReadOne(() => v, sub, wait);
+            var cp = await scope.ReadOne(() => v, sub, wait, ctx);
             json[prop] = (await scope.Collect(new List<Plant> { cp }))[0];
+            if (a["probe"] is JsonArray && json[prop] is JsonObject jo)
+            {
+                var pn = Strs(a, "probe");
+                jo["_probe"] = await Reader.Main(() =>
+                {
+                    var o = new JsonObject { ["(self)"] = Spike.Handlers(v, pn) };
+                    foreach (var p in cp.Props) if (p.Value != null) o[p.Name] = Spike.Handlers(p.Value, pn);
+                    return o;
+                }, ct);
+            }
         }
+        // "probe": [names] -> for every landed prop value (and the parent), which names have a handler there.
+        if (a["probe"] is JsonArray)
+        {
+            var pn = Strs(a, "probe");
+            json["_probe"] = await Reader.Main(() =>
+            {
+                var o = new JsonObject();
+                try { o["(parent)"] = Spike.Handlers(parent?.Invoke(), pn); } catch { }
+                foreach (var p in plant.Props)
+                {
+                    if (p.Value == null) continue;
+                    string t = "?"; try { t = p.Value.DataType?.Name; } catch { }
+                    var h = Spike.Handlers(p.Value, pn);
+                    h["$type"] = t;
+                    o[p.Name] = h;
+                }
+                return o;
+            }, ct);
+        }
+        // "each": {"ListProp": [subprops]} plants every element of a list value directly (max "max_each", default 50).
+        var maxEach = Int(a, "max_each", 50, 1, 500);
+        if (a["each"] is JsonObject each)
+            foreach (var kv in each)
+            {
+                var sub = Strs(each, kv.Key);
+                var list = plant[kv.Key]?.Value;
+                var elems = await Reader.Main(() => Reader.ListElems(list, maxEach), ct);
+                var parents = elems.ConvertAll<Func<TypedValue>>(e => () => e);
+                var t0 = Environment.TickCount64;
+                var ps = await scope.ReadMany(parents, sub, wait, ctx);
+                var rows = await scope.Collect(ps);
+                var arr = new JsonArray();
+                foreach (var r in rows) arr.Add(r);
+                json["each:" + kv.Key] = new JsonObject { ["count"] = elems.Count, ["ms"] = Environment.TickCount64 - t0, ["rows"] = arr };
+            }
         return json;
     }
 }
