@@ -45,4 +45,15 @@ Rules enforced by the plugin:
 
 ## Ops
 
-Listed with their arguments as they are added (see the end of this file).
+| op | args | result | thread |
+|---|---|---|---|
+| `hello` | – | `{plugin, plugin_version, protocol, game_build, build_supported, tested_builds[], bindings_captured, career_loaded, human_club_uid}` | main |
+| `diag` | – | `{ticks, last_tick_ms_ago, queued, bindings_captured}`; answered without the main thread (is the game's frame tick reaching the plugin?) | WS |
+| `panels` | – | `[{panel_id, instance, w, h}]`, top-most last | main |
+| `ui_dump` | `panel?`, `depth=12`, `max=400` | visible element tree `{name, type, text, bind, x, y, w, h, children}` | main |
+| `prop_check` | `names[]` | `{name: property id}`; 0 = unknown in this build | main |
+| `tree` | `path=""`, `depth=2`, `max=400` | binding tree `{name, type, value, children}` | main |
+| `read` | `ref: person\|club\|team\|path`, `uid` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}` | decoded props; unresolved ones under `_missing` | main + polling |
+| `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
+
+There is no generic click op. Discovery ops are read-only.
