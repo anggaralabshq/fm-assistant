@@ -6,7 +6,7 @@ import click
 
 from datetime import date, timedelta
 
-from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod
+from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
 from . import doctor as doctor_mod
 from . import game as game_mod
 from .client import FmClient, FmError, FmUnavailable
@@ -201,6 +201,27 @@ def squad_list(st, team):
     s = squad_mod.normalize(FmClient().call("squad", team=team))
     emit(st, s, table([[p["name"], p.get("age"), p["position"], p.get("condition"), p.get("injured")]
                        for p in s["players"]], ["name", "age", "position", "condition", "injured"]))
+
+
+@squad.command("watch")
+@click.option("--within", type=click.IntRange(0), default=180, show_default=True, help="Contract window in days.")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_watch(st, within, team):
+    need_hello(st)
+    s = FmClient().call("squad", team=team)
+    today = date.fromisoformat(s["today"])
+    days, _ = _training_days()
+    exp = watch_mod.expiring(s["players"], today, within)
+    inj = watch_mod.injuries(s["players"], today, days)
+    text = ("Contracts ending within %d days\n" % within
+            + table([[e["name"], e["age"], e["end_date"], e["days_left"], budget.fmt(e["wage"])] for e in exp],
+                    ["name", "age", "ends", "days left", "wage"])
+            + "\n\nInjured\n"
+            + table([[i["name"], i["description"] or "?", i["return_date"] or "?",
+                      "?" if i["matches_missed"] is None else (f"≥{i['matches_missed']}" if i["beyond_view"] else i["matches_missed"])]
+                     for i in inj], ["name", "injury", "back", "matches missed"]))
+    emit(st, {"today": today.isoformat(), "expiring": exp, "injured": inj}, text)
 
 
 @main.group()
