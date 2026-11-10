@@ -11,6 +11,7 @@ from . import contracts as contracts_mod
 from . import depth as depth_mod
 from . import fixtures as fixtures_mod
 from . import form as form_mod
+from . import loans as loans_mod
 from . import vacancies as vacancies_mod
 from . import doctor as doctor_mod
 from . import game as game_mod
@@ -279,6 +280,27 @@ def squad_form(st, team):
             + f"\nClub atmosphere: {(f.get('atmosphere') or {}).get('text') or '?'}")
     emit(st, {"today": f["today"], "team": f["team"], "players": rows, "flags": fl,
               "atmosphere": f.get("atmosphere")}, text)
+
+
+@squad.command("loans")
+@click.pass_obj
+def squad_loans(st):
+    """Players out on loan with their appearances, and the next youth intake."""
+    need_hello(st)
+    res = loans_mod.normalize(FmClient().call("loans"))
+    flagged = loans_mod.flags(res["out"], date.fromisoformat(res["today"]))
+    if res["out"]:
+        head = "Out on loan\n" + table(
+            [[l["name"], l.get("age"), l["club"]["name"], l.get("start_date"), l.get("end_date"), l["apps"],
+              "no matches yet" if l["rating"] is None else f"{l['rating']:.2f}", l.get("agreed_time"),
+              l.get("actual_time")] for l in res["out"]],
+            ["name", "age", "club", "from", "to", "apps", "rating", "agreed time", "actual time"])
+    else:
+        head = "Out on loan: none"
+    text = (head + "\n" + loans_mod.intake_line(res.get("intake"))
+            + (f"\nFlagged (no appearances {loans_mod.UNUSED_AFTER_DAYS}+ days into the loan): "
+               + ", ".join(l["name"] for l in flagged) if flagged else ""))
+    emit(st, {**res, "flagged": flagged}, text)
 
 
 def _depth_for(team: str = "first") -> dict:
