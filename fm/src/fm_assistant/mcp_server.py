@@ -69,6 +69,12 @@ TOOLS = (
     Tool("training_show", ("training", "show"), "Training calendar.",
          (P("weeks", int, "--weeks", doc="Days from today through today + 7*N."),)),
     Tool("training_load", ("training", "load"), "Sessions and matches per week, tired players."),
+    Tool("briefing", ("briefing",), "Session summary: next match, injuries, tired, contracts, concerns, form, vacancies, loans."),
+    Tool("fixtures", ("fixtures",), "Upcoming matches (home/away, competition) and the assistant's note on the next opponent.",
+         (P("n", int, "--n", doc="Fixtures to list (max 10)."),)),
+    Tool("squad_contracts", ("squad", "contracts"), "Squad status, contract end, release clause, game wage structure.", (TEAM,)),
+    Tool("squad_form", ("squad", "form"), "Season and last-five form, unhappy players, club atmosphere.", (TEAM,)),
+    Tool("squad_loans", ("squad", "loans"), "Players out on loan with games and rating; youth intake date."),
 )
 
 

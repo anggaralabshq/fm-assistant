@@ -45,7 +45,8 @@ def test_table_has_expected_tools_and_nothing_acting():
     names = {t.name for t in m.TOOLS}
     assert names == {"doctor", "game_status", "club_budget", "squad_list", "staff_search", "staff_slots",
                      "players_search", "training_show", "training_load", "staff_vacancies", "squad_watch",
-                     "squad_depth", "players_targets"}
+                     "squad_depth", "players_targets", "briefing", "fixtures", "squad_contracts", "squad_form",
+                     "squad_loans"}
     argvs = [set(t.argv) for t in m.TOOLS]
     assert not any(a & {"launch", "restart", "load-recent", "call"} for a in argvs)
 
