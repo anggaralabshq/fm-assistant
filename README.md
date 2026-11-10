@@ -38,9 +38,13 @@ Back up your save folder before trying anything new; this release only reads, bu
 | `fm doctor` | loader, plugin, game build, career, one read per feature |
 | `fm club budget` | balance, transfer budget, wage budget / committed / headroom, staff slots |
 | `fm squad list [--team first\|reserve\|youth]` | players, positions, condition, injuries |
+| `fm squad watch [--within 180]` | contracts ending soon; injured players' return date and matches missed |
+| `fm squad depth` | fit players per position against your minimums (`~/.fm-assistant/depth.json`, default 2); no formations |
 | `fm staff search --role scout [--top 10]` | Staff Search rows ranked for a role (`staff_roles.json`, overridable in `~/.fm-assistant/`) |
 | `fm staff slots` | staff slots per department, with the board's view |
+| `fm staff vacancies [--top 3]` | open staff jobs, each with the best Staff Search candidates for it |
 | `fm players search [--affordable]` | Player Database rows within your budget, as your scouts know them |
+| `fm players targets [--top 5]` | affordable Player Database rows for each thin position |
 | `fm training show [--weeks 2]` / `fm training load` | the training calendar; sessions and matches per week, tired players |
 
 Add `--json` before the command for machine output. `scripts/smoke.sh` runs all of them against the live game.
