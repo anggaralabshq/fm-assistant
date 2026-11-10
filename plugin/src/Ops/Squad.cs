@@ -31,7 +31,7 @@ internal static class Squad
         .Concat(Attributes.Select(a => "Attribute" + a)).ToArray();
     private static readonly string[] ContractProps = { "Wage", "EndDate", "ContractLength" };
 
-    /// {"team": "first"|"reserve"|"youth"} -> {club, team, count, players: [Player]} (docs/protocol.md "squad").
+    /// {"team": "first"|"reserve"|"youth"} -> {club, team, today, count, players: [Player]} (docs/protocol.md "squad").
     public static async Task<JsonNode> Read(JsonObject a, CancellationToken ct)
     {
         var which = Meta.Str(a, "team") ?? "first";
@@ -39,12 +39,14 @@ internal static class Squad
         var clubUid = await Club.HumanUid(ct);
         JsonObject club, team;
         List<int> uids;
+        string today;
         await using (var scope = new ReadScope(ct))
         {
             club = (await scope.Collect(new List<Plant> { await scope.ReadOne(() => Reader.ClubRef(clubUid), new[] { "Name", teamProp }) }))[0];
             var teamUid = (int?)(club[teamProp] as JsonObject)?["uid"] ?? throw new OpException("ui-element-missing", $"club has no {teamProp}");
             team = (await scope.Collect(new List<Plant> { await scope.ReadOne(() => Reader.TeamRef(teamUid), new[] { "Name", "Players" }) }))[0];
             Reader.Require(team, "team", "Players");
+            today = await Training.Today(scope);
             team["uid"] = teamUid;
             uids = (team["Players"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
                 .Where(r => (string)r["$ref"] == "Person").Select(r => (int)r["uid"]).Take(MaxPlayers).ToList();
@@ -65,6 +67,7 @@ internal static class Squad
         {
             ["club"] = new JsonObject { ["uid"] = clubUid, ["name"] = club["Name"].Copy() },
             ["team"] = new JsonObject { ["uid"] = team["uid"].Copy(), ["name"] = team["Name"].Copy(), ["kind"] = which },
+            ["today"] = today,
             ["count"] = players.Count,
             ["players"] = players,
         };

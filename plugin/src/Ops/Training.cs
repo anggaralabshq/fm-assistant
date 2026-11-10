@@ -33,6 +33,14 @@ internal static class Training
         return (heads, weeks, days);
     }
 
+    /// game.CurrentGameDate as "YYYY-MM-DD" (also used by op squad).
+    public static async Task<string> Today(ReadScope scope)
+    {
+        var g = await scope.ReadOne(() => FmAssistant.Tree.Find("game")?.Value, new[] { "CurrentGameDate" });
+        return (string)(await scope.Collect(new List<Plant> { g }))[0]["CurrentGameDate"]
+            ?? throw new OpException("ui-element-missing", "game.CurrentGameDate");
+    }
+
     /// {} -> {today, days: [{index, day_label, day_of_month, weekday, schedule, sessions[3], session_types[3], match}]}
     public static async Task<JsonNode> Read(JsonObject a, CancellationToken ct)
     {
@@ -57,9 +65,7 @@ internal static class Training
         var names = new Dictionary<int, string>();
         await using (var scope = new ReadScope(ct))
         {
-            var g = await scope.ReadOne(() => FmAssistant.Tree.Find("game")?.Value, new[] { "CurrentGameDate" });
-            today = (string)(await scope.Collect(new List<Plant> { g }))[0]["CurrentGameDate"]
-                ?? throw new OpException("ui-element-missing", "game.CurrentGameDate");
+            today = await Today(scope);
             var tp = await scope.ReadMany(opponents.Select(u => (Func<TypedValue>)(() => Reader.TeamRef(u))).ToList(), new[] { "AbbreviatedName", "Name" });
             var tr = await scope.Collect(tp);
             for (var i = 0; i < opponents.Count; i++) names[opponents[i]] = (string)tr[i]["AbbreviatedName"] ?? (string)tr[i]["Name"];
