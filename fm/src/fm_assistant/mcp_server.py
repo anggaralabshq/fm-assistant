@@ -1,4 +1,4 @@
-"""Read-only MCP server (stdio): each tool shells out to `fm --json ...`; the CLI stays the source of truth.
+"""MCP server (stdio), read tools plus plan/apply/log: each tool shells out to `fm --json ...`; the CLI stays the source of truth.
 
 Add a command = add one Tool(...) line to TOOLS.
 """
@@ -33,6 +33,8 @@ class Tool:
     argv: tuple
     doc: str
     params: tuple = ()
+    acts: bool = False       # can change the game: description says so instead of "Read-only"
+    timeout: int = TIMEOUT
 
     def argv_for(self, args: dict) -> list:
         out = list(self.argv)
@@ -40,9 +42,10 @@ class Tool:
             v = args.get(p.name)
             if v is None or v is False:
                 continue
-            out.append(p.flag)
+            if p.flag:        # empty flag = positional argument
+                out.append(p.flag)
             if v is not True:
-                out.append(str(v))
+                out.append(json.dumps(v) if isinstance(v, (list, dict)) else str(v))
         return out
 
 
@@ -82,16 +85,33 @@ TOOLS = (
     Tool("squad_rotation", ("squad", "rotation"), "Congested fixtures ahead: tired or injured XI players and options.",
          (P("days", int, "--days", doc="Window in days (default 7)."),)),
     Tool("trends", ("trends",), "Saves today's snapshot, then compares with the latest earlier one."),
+    Tool("propose", ("plan", "create"),
+         "Write a plan (nothing is sent to the game). Each action is {kind, args}; kinds: staff.approach, staff.offer, "
+         "shortlist.add, shortlist.remove, scout.request_report, training.set_sessions, training.set_focus, "
+         "contract.open_renewal, contract.offer_renewal. Show the plan to the owner and wait for a yes before apply.",
+         (P("actions", list[dict], "--actions", required=True, doc="List of {kind, args}."),
+          P("reason", str, "--reason", required=True, doc="Why, for the owner."),
+          P("summary", str, "--summary", doc="One line; defaults to the action descriptions."))),
+    Tool("plan_show", ("plan", "show"), "Show a plan by id: status, reason and each action.",
+         (P("plan_id", str, "", required=True, doc="Plan id."),)),
+    Tool("apply", ("apply",),
+         "CHANGES THE GAME: backs up the save, then performs the plan's actions. Only call after the owner has "
+         "explicitly approved this exact plan in this conversation; the client must ask for confirmation.",
+         (P("plan_id", str, "", required=True, doc="Id of a proposed plan."),), acts=True, timeout=900),
+    Tool("log", ("log",), "Last audit log entries (applies, refusals, aborts).",
+         (P("n", int, "--n", doc="Entries to show (default 20)."),)),
 )
+
+WRITES = {"propose"}   # writes a plan file only, never the game
 
 
 def run_tool(tool: Tool, args: dict) -> dict:
     """Run `fm --json ...`; always return the parsed envelope (errors included), never raise."""
     cmd = [sys.executable, "-m", "fm_assistant.cli", "--json", *tool.argv_for(args)]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=tool.timeout)
     except subprocess.TimeoutExpired:
-        return {"ok": False, "error": {"code": "timeout", "detail": f"fm did not finish within {TIMEOUT}s"}}
+        return {"ok": False, "error": {"code": "timeout", "detail": f"fm did not finish within {tool.timeout}s"}}
     try:
         out = json.loads(r.stdout)
     except ValueError:
@@ -119,7 +139,7 @@ def _make_fn(tool: Tool):
 def build_server():
     srv = Server("fm-assistant")
     for t in TOOLS:
-        srv.add_tool(_make_fn(t), name=t.name, description=t.doc + " Read-only.")
+        srv.add_tool(_make_fn(t), name=t.name, description=t.doc if t.acts or t.name in WRITES else t.doc + " Read-only.")
     return srv
 
 

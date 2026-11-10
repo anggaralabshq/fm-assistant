@@ -631,18 +631,19 @@ def plan():
 @click.argument("kind", required=False)
 @click.option("--arg", "args_", multiple=True, metavar="K=V", help="Action argument; V is JSON when it parses, else text.")
 @click.option("--file", "file_", type=click.Path(exists=True, dir_okay=False), help="JSON list of {kind, args}.")
+@click.option("--actions", "actions_", help="The same JSON list, inline.")
 @click.option("--reason", required=True)
 @click.option("--summary", default="")
 @click.pass_context
-def plan_create(ctx, kind, args_, file_, reason, summary):
+def plan_create(ctx, kind, args_, file_, actions_, reason, summary):
     st = ctx.find_object(State)
     try:
-        if file_:
-            acts = json.loads(open(file_).read())
+        if file_ or actions_:
+            acts = json.loads(actions_ or open(file_).read())
         elif kind:
             acts = [{"kind": kind, "args": {k: _val(v) for k, _, v in (a.partition("=") for a in args_)}}]
         else:
-            raise ValueError("give a kind or --file")
+            raise ValueError("give a kind, --file or --actions")
         p = plans_mod.create(acts, reason, summary)
     except (ValueError, TypeError, AttributeError) as e:
         fail(ctx, 3, "invalid-plan", str(e), f"invalid plan: {e}")

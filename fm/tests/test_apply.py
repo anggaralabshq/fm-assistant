@@ -127,6 +127,8 @@ def test_cli_plan_create_file_and_bad_input(tmp_path):
     f.write_text(json.dumps([{"kind": "training.set_focus", "args": {"uid": 3, "type_row": -1}}]))
     r = run("--json", "plan", "create", "--file", str(f), "--reason", "r")
     assert json.loads(r.stdout)["result"]["actions"][0]["kind"] == "training.set_focus"
+    r = run("--json", "plan", "create", "--actions", json.dumps([{"kind": "shortlist.remove", "args": {"uid": 8}}]), "--reason", "r")
+    assert json.loads(r.stdout)["result"]["actions"][0]["args"] == {"uid": 8}
     r = run("plan", "create", "staff.fire", "--arg", "uid=1", "--reason", "r")
     assert r.exit_code == 3 and "unknown kind" in r.stderr
 
