@@ -16,5 +16,6 @@ internal static class OpsEntry
         ["list_rows"] = (Meta.ListRows, 15),
         ["load_recent_save"] = (GameOps.LoadRecentSave, 10),
         ["nav_open"] = (Nav.Open, 30),
+        ["club"] = (Club.Read, 30),
     };
 }

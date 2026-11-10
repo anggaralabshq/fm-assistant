@@ -173,11 +173,10 @@ def club_budget(st):
     need_hello(st)
     c = FmClient().call("club")
     c["wage_headroom"] = budget.wage_headroom(c)
-    # ponytail: headroom is in the game's base-currency sort value; no display text exists for a difference
-    emit(st, c, kv({"club": c["name"], "balance": budget.fmt(c["balance"]),
+    emit(st, c, kv({"club": c["name"], "balance": budget.fmt(c.get("balance")), "status": c.get("financial_status"),
                     "transfer budget": budget.fmt(c["transfer_budget"]), "wage budget": budget.fmt(c["wage_budget"]),
                     "wage committed": budget.fmt(c["wage_committed"]),
-                    "wage headroom": f"{c['wage_headroom']:g} (base-currency value)",
+                    "wage headroom": budget.fmt(c.get("wage_remaining")),
                     "staff slots": slots_text(c["staff_slots"])}))
 
 

@@ -55,7 +55,7 @@ internal static class Nav
         return null;
     }
 
-    /// {"panel": id} or {"guid": hex32} -> {"panel", "open": true} / {"guid", "open_panels"}.
+    /// {"panel": id}, or dev-only {"guid": hex32} / {"subtab": hex32 of a visible secondary tab} -> {"panel", "open": true} / {"guid", "open_panels"}.
     public static async Task<JsonNode> Open(JsonObject a, CancellationToken ct)
     {
         var panel = Meta.Str(a, "panel");
@@ -66,6 +66,14 @@ internal static class Nav
             await Reader.MainR(() => OpenGuid(guid), ct);
             await Task.Delay(3000, ct);
             return new JsonObject { ["guid"] = guid, ["open_panels"] = await Reader.Main(Ui.OpenIds, ct) };
+        }
+        var subtab = Meta.Str(a, "subtab");
+        if (subtab != null)
+        {
+            if (!DevGuids) throw new OpException("bad-request", "subtab clicks are dev-only");
+            await Reader.MainR(() => ClickSubtab(subtab), ct);
+            await Task.Delay(2500, ct);
+            return new JsonObject { ["subtab"] = subtab, ["open_panels"] = await Reader.Main(Ui.OpenIds, ct) };
         }
         if (panel == null || !Allowed.ContainsKey(panel))
             throw new OpException("bad-request", $"panel must be one of {string.Join(", ", Allowed.Keys)}");

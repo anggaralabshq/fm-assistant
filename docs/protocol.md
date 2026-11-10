@@ -56,10 +56,30 @@ Rules enforced by the plugin:
 | `tree` | `path=""`, `depth=2`, `max=400` | binding tree `{name, type, value, children}` | main |
 | `read` | `ref: person\|club\|team\|path`, `uid` or `path`, `props[]`, `wait_ms=4000`, `chain: {prop: [subprops]}` | decoded props; unresolved ones under `_missing` | main + polling |
 | `list_rows` | `panel`, `index=0`, `start=0`, `max=200` | `{panel, widgets: [{name, type, item_count, columns}], rows}`; backing data of list/table widgets (all rows, decoded) | main |
-| `nav_open` | `panel` | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`; `wrong-screen` if it did not open | main + waits |
+| `nav_open` | `panel` (dev only while `~/.fm-assistant/dev-nav` exists: `guid`, or `subtab` = GUID of a visible secondary tab) | `{panel, open: true}`; allowlist: `TrainingScreen`, `SquadScreen`, `ClubScreen`, `ClubAllStaffTool`, `StaffSearchReport`; `wrong-screen` if it did not open | main + waits |
 | `load_recent_save` | – | `{clicked: true}`; clicks MainMenu's `LoadMostRecentSave` tile; refuses when a career is loaded | main |
 
+| `club` | – | `{uid, name, balance, financial_status, transfer_budget, wage_budget, wage_committed, wage_remaining, staff_slots}`; see below | main + polling |
+
 There is no generic click op. Discovery ops are read-only.
+
+### Money
+
+`Money = {"display": str, "value": number}`. `value` is the game's base-currency number (what the props hold);
+`display` is the game's own formatter `SI.Bindable.BindableTranslationUtils.FormatCashValue(value)` in the owner's
+chosen currency (e.g. `Rp5,71M`). Screens may round the last digit differently (`Rp364Jt` vs a tile's `Rp365Jt`).
+
+### club
+
+Human club (`Human.Club` uid) props: `TransferBudget`, `WageBudget` (per week), `CommittedWageSpending`,
+`RemainingWageBudget` (= budget − committed), `OverallBalance` (ClubScreen "overall balance"),
+`FinancialStatus` (`{display, sort}`), `MainTeam`. Staff slots from the main team's `StaffCoachingSubGroup`,
+`StaffRecruitmentSubGroup`, `StaffMedicalSubGroup`: `Count` → `used`, `MaxValue` → `max` (the board's target;
+`used > max` happens), `ShortString` → `summary`, `StaffSubGroupCountFeedbackString` → `board_feedback`,
+`StaffSubGroupJobsData[]` → `jobs: [{job, job_type, used, max}]`.
+Known gap: the ClubScreen "transfer/wage budget" tile showed Rp5,75M while `TransferBudget` formats to Rp5,71M
+(build 27.0.0.2493426); the tile's source is a VisualFunction not identified yet. Finance (`Keuangan`) is a
+secondary-tab dropdown (`SecondaryTabDropdownButton`, no SIButton), not reachable by `ClickSubtab` yet.
 
 ## Navigation routes (nav_open)
 

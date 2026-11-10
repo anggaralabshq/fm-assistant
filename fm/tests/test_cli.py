@@ -118,7 +118,7 @@ def test_club_budget_shows_headroom_and_slots(monkeypatch):
     fake_calls(monkeypatch, {"hello": HELLO, "club": fixture("club.json")})
     r = run("club", "budget")
     assert r.exit_code == 0, r.output
-    assert "Rp239Jt" in r.output and "headroom" in r.output and "3000" in r.output
+    assert "Rp239Jt" in r.output and "wage headroom: Rp72Jt" in r.output
     assert "coaching 7/9" in r.output
 
 
