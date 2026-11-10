@@ -19,7 +19,11 @@ SESSION_PATH = Path.home() / ".fm-assistant" / "session.json"
 OP_TIMEOUTS = {"hello": 10, "diag": 5, "dev_reload": 30, "panels": 10, "ui_dump": 10, "prop_check": 10, "tree": 10,
                "read": 60, "list_rows": 15, "load_recent_save": 10, "nav_open": 30, "club": 30, "squad": 90,
                "staff_search": 90, "player_search": 90, "training": 60,
-               "form": 90, "fixtures": 60, "loans": 60, "inbox": 30, "tactic": 30, "ctx_check": 30}
+               "form": 90, "fixtures": 60, "loans": 60, "inbox": 30, "tactic": 30, "ctx_check": 30,
+               **{op: 60 for op in ("act_staff_approach", "act_staff_offer", "act_shortlist_add", "act_shortlist_remove",
+                                    "act_scout_request", "act_training_sessions", "act_training_focus",
+                                    "act_contract_open", "act_contract_offer")},
+               "negotiation": 15}
 
 
 class FmUnavailable(Exception):

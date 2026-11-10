@@ -20,6 +20,7 @@ from . import form as form_mod
 from . import loans as loans_mod
 from . import vacancies as vacancies_mod
 from . import doctor as doctor_mod
+from . import apply as apply_mod, audit as audit_mod, plans as plans_mod
 from . import game as game_mod
 from .client import FmClient, FmError, FmUnavailable
 
@@ -607,6 +608,92 @@ def training_load(st):
                      for w, v in load["weeks"].items())
     text += "\ntired: " + (", ".join(p["name"] for p in load["tired"]) or "none")
     emit(st, load, text)
+
+
+def _val(s: str):
+    try:
+        return json.loads(s)
+    except ValueError:
+        return s
+
+
+def plan_text(p: dict) -> str:
+    return "\n".join([f"{p['id']}  {p['status']}  {p['created']}", f"reason: {p['reason']}", f"summary: {p['summary']}",
+                      *(f"{i}. {a['kind']}: {a['describe']}" for i, a in enumerate(p["actions"]))])
+
+
+@main.group()
+def plan():
+    """Plans to approve before `fm apply`."""
+
+
+@plan.command("create")
+@click.argument("kind", required=False)
+@click.option("--arg", "args_", multiple=True, metavar="K=V", help="Action argument; V is JSON when it parses, else text.")
+@click.option("--file", "file_", type=click.Path(exists=True, dir_okay=False), help="JSON list of {kind, args}.")
+@click.option("--reason", required=True)
+@click.option("--summary", default="")
+@click.pass_context
+def plan_create(ctx, kind, args_, file_, reason, summary):
+    st = ctx.find_object(State)
+    try:
+        if file_:
+            acts = json.loads(open(file_).read())
+        elif kind:
+            acts = [{"kind": kind, "args": {k: _val(v) for k, _, v in (a.partition("=") for a in args_)}}]
+        else:
+            raise ValueError("give a kind or --file")
+        p = plans_mod.create(acts, reason, summary)
+    except (ValueError, TypeError, AttributeError) as e:
+        fail(ctx, 3, "invalid-plan", str(e), f"invalid plan: {e}")
+    emit(st, p, plan_text(p))
+
+
+@plan.command("show")
+@click.argument("plan_id")
+@click.pass_obj
+def plan_show(st, plan_id):
+    p = plans_mod.load(plan_id)
+    emit(st, p, plan_text(p))
+
+
+@plan.command("list")
+@click.option("--status", type=click.Choice(["proposed", "applied", "partial", "failed", "refused"]))
+@click.pass_obj
+def plan_list(st, status):
+    ps = plans_mod.list_plans(status)
+    emit(st, ps, "\n".join(f"{p['id']}  {p['status']}  {p['summary']}" for p in ps) or "no plans")
+
+
+@main.command("apply")
+@click.argument("plan_id")
+@click.pass_context
+def apply_cmd(ctx, plan_id):
+    """Back up the save, then perform an approved plan in the game. Only run after the owner said yes."""
+    st = ctx.find_object(State)
+    h = need_hello(st)
+    res = apply_mod.run(plan_id, FmClient(), h)
+    if res.get("error"):     # nothing was sent
+        fail(ctx, 3, res["error"]["code"], res["error"]["detail"], res["error"]["detail"])
+    lines = []
+    for r in res["actions"]:
+        word = {"ok": "ok", "failed": "FAIL", "skipped": "SKIP"}[r["status"]]
+        why = (r.get("result") or {}).get("answer") if r["status"] == "ok" else \
+            f"{r['error']['code']}: {r['error']['detail']}" if r["status"] == "failed" else "not attempted"
+        lines.append(f"{word} {r['describe']}: {why}")
+    lines.append(f"backup: {res['backup']['path']} (sha256 {res['backup']['sha256'][:12]})")
+    emit(st, res, "\n".join(lines))
+    if res["status"] != "applied":
+        ctx.exit(3)
+
+
+@main.command("log")
+@click.option("--n", type=click.IntRange(1), default=20, show_default=True)
+@click.pass_obj
+def log_cmd(st, n):
+    """Last audit log entries (applies, refusals, aborts)."""
+    rows = audit_mod.tail(n)
+    emit(st, rows, "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) or "log is empty")
 
 
 if __name__ == "__main__":

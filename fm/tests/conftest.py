@@ -37,6 +37,20 @@ def snapshots_in_tmp(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("FM_ASSISTANT_SNAP_DIR", str(d))
 
 
+@pytest.fixture(autouse=True)
+def actions_in_tmp(tmp_path_factory, monkeypatch):
+    """No test may touch the real ~/.fm-assistant or the real games dir."""
+    from fm_assistant import apply, audit, backup, plans
+    t = tmp_path_factory.mktemp("actions")
+    games = t / "games"
+    games.mkdir()
+    monkeypatch.setattr(plans, "PLANS_DIR", t / "plans")
+    monkeypatch.setattr(backup, "BACKUP_DIR", t / "backups")
+    monkeypatch.setattr(backup, "GAMES_DIR", games)
+    monkeypatch.setattr(apply, "APPLY_DIR", t / "apply")
+    monkeypatch.setattr(audit, "LOG", t / "log.jsonl")
+
+
 @pytest.fixture
 def fake(tmp_path):
     made = []
