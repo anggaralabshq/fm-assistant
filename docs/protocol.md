@@ -65,6 +65,7 @@ Rules enforced by the plugin:
 | `player_search` | `max=200` (1–1000) | `{count, returned, truncated, rows: [Prospect]}`; opens `PlayerSearchReport` itself | main + polling |
 | `training` | – | `{today, days: [Day]}`; opens `TrainingScreen` itself; see below | main + polling |
 | `form` | `team=first\|reserve\|youth` | `{today, team: {uid, name, kind}, players: [Form], concerns: [uid], atmosphere: {level, text}\|null}`; see below | main + polling |
+| `fixtures` | `n=5` (1–10) | `{today, team_uid, next: Fixture\|null, upcoming: [Fixture], threat, opponent_formation}`; see below | main + polling |
 
 There is no generic click op. Discovery ops are read-only. `prop_check`, `tree` and `read` can reach values the
 manager cannot see (hidden attributes), so they answer only in dev mode (file `~/.fm-assistant/dev-nav` exists);
@@ -168,6 +169,24 @@ refs → `concerns`), `ClubAtmosphereFeedback` (`CurrentDynamicSupportLevel` →
   Extra time is not counted. There is no season-minutes prop.
 - Early season / friendlies only: competitive counters are 0 and `Competition` is null; ratings come from the
   friendlies' records (competition null).
+
+### fixtures
+
+First team (`Club.MainTeam`). Team props: `NextFixture` (`FixtureReference`), `NextMatchOpponent`, `NextMatchLocation`,
+`Next5FixturesData` (5 × `{Fixture, Team}`), `NextOppositionThreatLevelAssessment` (localized sentence → `threat`;
+null when empty or no next fixture), and for `n` > 5 `RemainingLeagueFixtures` (`{Fixture, Team}` records, league
+only). A `FixtureReference` inside a list record has no uid, so the op plants on each record's `Fixture` value
+directly (`Reader.ListField`) and reads `FixtureDate`, `HomeTeam`, `AwayTeam`, `Competition` (→ comp `Name`, planted on
+the comp value once per comp uid). Opponent names: team `Name`; `opponent_formation` = the next opponent's
+`MostUsedFormation` (localized, as the game shows it; never used for advice).
+`Fixture = {date, opponent: {uid, name}, home, competition}`.
+- `home`: own team uid == `HomeTeam` → true, == `AwayTeam` → false, neither → null (the opponent then comes from the
+  record's `Team` / `NextMatchOpponent`). For `next` only: when `NextMatchLocation` disagrees with that comparison
+  (1 = home is the only value seen) `home` is null (e.g. a neutral venue).
+- `upcoming`: the next fixtures, date ascending, `date` ≥ `today`, deduplicated by (date, opponent), at most `n`;
+  `upcoming[0]` equals `next` when both exist. Beyond the fifth fixture only league fixtures are known (cup ties after
+  the fifth are missing).
+- No next fixture: `next: null`, `threat: null`, `opponent_formation: null`.
 
 ### training
 
