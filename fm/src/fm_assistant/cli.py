@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
 from . import contracts as contracts_mod
 from . import depth as depth_mod
+from . import briefing as briefing_mod
 from . import fixtures as fixtures_mod
 from . import form as form_mod
 from . import loans as loans_mod
@@ -174,6 +175,23 @@ def shown(res: dict) -> str:
 
 def slots_text(slots: dict) -> str:
     return ", ".join(f"{k} {v['used']}/{v['max']}" for k, v in slots.items())
+
+
+@main.command("briefing")
+@click.pass_obj
+def briefing_cmd(st):
+    """Session briefing: next match, injuries, tired, contracts, concerns, form, vacancies, loans (no slow searches)."""
+    need_hello(st)
+    c = FmClient()
+    parts = {}
+    for op, args in (("squad", {"team": "first"}), ("training", {}), ("fixtures", {"n": 5}), ("form", {"team": "first"}),
+                     ("club", {}), ("loans", {})):
+        try:
+            parts[op] = c.call(op, **args)
+        except FmError as e:  # one failed part never hides the others; FmUnavailable still stops the command
+            parts[op] = {"error": e.code}
+    b = briefing_mod.build(parts)
+    emit(st, b, briefing_mod.text(b))
 
 
 @main.group()
