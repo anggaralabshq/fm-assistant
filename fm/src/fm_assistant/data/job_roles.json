@@ -1,0 +1,16 @@
+{
+  "14": ["scout"],
+  "44": ["scout"],
+  "58": ["recruitment_analyst"],
+  "60": ["performance_analyst"],
+  "62": ["performance_analyst"],
+  "12": ["physio"],
+  "50": ["physio"],
+  "40": ["sports_scientist"],
+  "48": ["sports_scientist"],
+  "22": ["set_piece_coach"],
+  "10": ["director_of_football"],
+  "88": ["director_of_football"],
+  "64": ["coach_youth"],
+  "104": ["coach_attacking", "coach_defending", "coach_fitness", "coach_goalkeeping"]
+}

@@ -6,7 +6,9 @@ import click
 
 from datetime import date, timedelta
 
-from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod
+from . import budget, players as players_mod, squad as squad_mod, staff as staff_mod, training as training_mod, watch as watch_mod
+from . import depth as depth_mod
+from . import vacancies as vacancies_mod
 from . import doctor as doctor_mod
 from . import game as game_mod
 from .client import FmClient, FmError, FmUnavailable
@@ -203,6 +205,52 @@ def squad_list(st, team):
                        for p in s["players"]], ["name", "age", "position", "condition", "injured"]))
 
 
+@squad.command("watch")
+@click.option("--within", type=click.IntRange(0), default=180, show_default=True, help="Contract window in days.")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_watch(st, within, team):
+    need_hello(st)
+    s = FmClient().call("squad", team=team)
+    today = date.fromisoformat(s["today"])
+    days, _ = _training_days()
+    exp = watch_mod.expiring(s["players"], today, within)
+    inj = watch_mod.injuries(s["players"], today, days)
+    if team != "first":  # the training calendar is the first team's: its matches are not this team's
+        inj = [{**i, "matches_missed": None, "beyond_view": False} for i in inj]
+    text = ("Contracts ending within %d days\n" % within
+            + table([[e["name"], e["age"], e["end_date"], e["days_left"], budget.fmt(e["wage"])] for e in exp],
+                    ["name", "age", "ends", "days left", "wage"])
+            + "\n\nInjured\n"
+            + table([[i["name"], i["description"] or "?", i["return_date"] or "?",
+                      "?" if i["matches_missed"] is None else (f"≥{i['matches_missed']}" if i["beyond_view"] else i["matches_missed"])]
+                     for i in inj], ["name", "injury", "back", "matches missed"]))
+    emit(st, {"today": today.isoformat(), "expiring": exp, "injured": inj}, text)
+
+
+def _depth_for(team: str = "first") -> dict:
+    s = squad_mod.normalize(FmClient().call("squad", team=team))
+    return depth_mod.depth(s["players"], depth_mod.load_minimums(depth_mod.USER_DEPTH))
+
+
+def depth_text(res: dict) -> str:
+    text = table([[s["slot"], f"{s['fit']}/{s['min']}" + (" thin" if s["thin"] else ""), ", ".join(s["names"])]
+                  for s in res["slots"]], ["slot", "fit/min", "names"])
+    if res["unknown_position"]:
+        text += "\nunknown position: " + ", ".join(res["unknown_position"])
+    return text
+
+
+@squad.command("depth")
+@click.option("--team", type=click.Choice(["first", "reserve", "youth"]), default="first", show_default=True)
+@click.pass_obj
+def squad_depth(st, team):
+    """Players per position slot (positions only, no formation); thin = fit players below the minimum."""
+    need_hello(st)
+    res = _depth_for(team)
+    emit(st, res, depth_text(res))
+
+
 @main.group()
 def staff():
     """Staff search and slots (F11)."""
@@ -236,6 +284,38 @@ def staff_slots(st):
     emit(st, slots, slots_text(slots))
 
 
+@staff.command("vacancies")
+@click.option("--top", type=click.IntRange(1), default=3, show_default=True, help="Candidates per role.")
+@click.pass_obj
+def staff_vacancies(st, top):
+    """Open staff jobs (below the board's target) with ranked candidates."""
+    roles, job_roles = staff_mod.load_roles(), vacancies_mod.load_job_roles()
+    need_hello(st)
+    c = FmClient()
+    club_ = c.call("club")
+    res = c.call("staff_search", max=1000)
+    own = club_.get("uid")  # the Staff Search filter may include the club's own staff
+    pool = {**res, "rows": [r for r in res["rows"] if own is None or r.get("club_uid") != own]}
+    jobs = vacancies_mod.fill(vacancies_mod.open_jobs(club_), pool, roles, job_roles, top)
+    blocks = []
+    for j in jobs:
+        head = f"{j['job']}: {j['open']} open" + (f" — {j['summary']}" if j.get("summary") else "")
+        if not j["roles"]:
+            blocks.append(head + "\n  no role mapping, no candidates")
+            continue
+        t = table([[s["score"], s["role"], s["name"], s.get("age"), s.get("preferred_job"),
+                    budget.fmt(s.get("wage_demand")), budget.fmt(s.get("current_wage"))] for s in j["candidates"]],
+                  ["score", "role", "name", "age", "job", "wage demand", "current wage"])
+        if not j["matching"]:
+            t += (f"\n0 of {j['returned']} searched staff prefer this job: set the game's Staff Search filter"
+                  " to this job for better candidates")
+        blocks.append(head + "\n" + "\n".join("  " + ln for ln in t.splitlines()))
+    text = "\n\n".join(blocks) or "No open staff jobs."
+    if res["truncated"]:
+        text += f"\nranked among {res['returned']} of {res['count']}"
+    emit(st, {"jobs": jobs, "count": res["count"], "returned": res["returned"], "truncated": res["truncated"]}, text)
+
+
 @main.group()
 def players():
     """Player search respecting scouting knowledge (F6)."""
@@ -256,6 +336,35 @@ def players_search(st, max_, affordable):
                           budget.fmt(p.get("wage")), p.get("scout_rating")] for p in res["rows"]],
                         ["name", "age", "position", "price", "wage", "scout"])
          + f"\n{shown(res)}" + (f", {len(res['rows'])} affordable" if affordable else ""))
+
+
+@players.command("targets")
+@click.option("--top", type=click.IntRange(1), default=5, show_default=True, help="Candidates per thin slot.")
+@click.option("--max", "max_", type=click.IntRange(1, 1000), default=1000, show_default=True, help="Rows to read.")
+@click.pass_obj
+def players_targets(st, top, max_):
+    """Affordable scouting targets for each thin position slot of the first team."""
+    need_hello(st)
+    c = FmClient()
+    sq = squad_mod.normalize(c.call("squad", team="first"))
+    res = depth_mod.depth(sq["players"], depth_mod.load_minimums(depth_mod.USER_DEPTH))
+    thin = [s for s in res["slots"] if s["thin"]]
+    found = players_mod.normalize(c.call("player_search", max=max_))
+    club_ = c.call("club")
+    own = (sq.get("club") or {}).get("uid")  # the Player Database filter may include the owner's own club
+    others = [r for r in found["rows"] if own is None or r.get("club_uid") != own]
+    rows = players_mod.affordable(others, club_["transfer_budget"]["value"], budget.wage_headroom(club_))
+    picked = depth_mod.targets(thin, rows, top)
+    out = {**res, "targets": picked, "searched": {k: found.get(k) for k in ("count", "returned", "truncated")}}
+    parts = [depth_text(res)]
+    for s in thin:
+        parts.append(f"\n{s['slot']} (fit {s['fit']}/{s['min']})")
+        parts.append(table([[p["name"], p.get("age"), p["position"], budget.fmt(p.get("asking_price") or p.get("value")),
+                             budget.fmt(p.get("wage")), p.get("scout_rating"), "budget?" if p["budget_unknown"] else ""]
+                            for p in picked[s["slot"]]], ["name", "age", "position", "price", "wage", "scout", ""])
+                     if picked[s["slot"]] else "no affordable candidates")
+    parts.append(f"\n{shown(found)}, {len(rows)} affordable")
+    emit(st, out, "\n".join(parts))
 
 
 @main.group()

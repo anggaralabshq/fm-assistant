@@ -1,7 +1,62 @@
-{"count": 5000, "returned": 3, "truncated": true, "rows": [
- {"uid": 11, "name": "Ade Kurniawan", "age": 44, "club_uid": null, "preferred_job": "Pelatih",
-  "attributes": {"Attacking": 16, "Technical": 14, "Tactical": 12, "Determination": 15, "Motivating": 13, "Defending": 8}, "wage_demand": {"display": "Rp9Jt p/mgg", "value": 380}},
- {"uid": 12, "name": "Bruno Martins", "age": 51, "club_uid": 900777, "preferred_job": "Pelatih",
-  "attributes": {"Attacking": 18, "Technical": 17, "Tactical": 15, "Determination": 12, "Motivating": 14}, "wage_demand": {"display": "Rp30Jt p/mgg", "value": 1250}},
- {"uid": 13, "name": "Cahyo Utomo", "age": 38, "club_uid": null, "preferred_job": "Pelatih",
-  "attributes": {"Attacking": 11, "Technical": 10, "Tactical": 9, "Determination": 18, "Motivating": 17}, "wage_demand": null}]}
+{
+ "count": 5000,
+ "returned": 3,
+ "truncated": true,
+ "rows": [
+  {
+   "uid": 11,
+   "name": "Ade Kurniawan",
+   "age": 44,
+   "club_uid": null,
+   "preferred_job": "Pelatih",
+   "attributes": {
+    "Attacking": 16,
+    "Technical": 14,
+    "Tactical": 12,
+    "Determination": 15,
+    "Motivating": 13,
+    "Defending": 8
+   },
+   "wage_demand": {
+    "display": "Rp9Jt p/mgg",
+    "value": 380
+   },
+   "preferred_job_type": 104
+  },
+  {
+   "uid": 12,
+   "name": "Bruno Martins",
+   "age": 51,
+   "club_uid": 900777,
+   "preferred_job": "Pelatih",
+   "attributes": {
+    "Attacking": 18,
+    "Technical": 17,
+    "Tactical": 15,
+    "Determination": 12,
+    "Motivating": 14
+   },
+   "wage_demand": {
+    "display": "Rp30Jt p/mgg",
+    "value": 1250
+   },
+   "preferred_job_type": 104
+  },
+  {
+   "uid": 13,
+   "name": "Cahyo Utomo",
+   "age": 38,
+   "club_uid": null,
+   "preferred_job": "Pelatih",
+   "attributes": {
+    "Attacking": 11,
+    "Technical": 10,
+    "Tactical": 9,
+    "Determination": 18,
+    "Motivating": 17
+   },
+   "wage_demand": null,
+   "preferred_job_type": 44
+  }
+ ]
+}

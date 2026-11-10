@@ -19,9 +19,13 @@ run doctor
 run game status
 run club budget
 run squad list
+run squad watch
+run squad depth
 run staff search --role scout --top 5
 run staff slots
+run staff vacancies --top 2
 run players search --max 50 --affordable
+run players targets --max 200 --top 3
 run training show
 run training load
 echo "smoke: all ok"
