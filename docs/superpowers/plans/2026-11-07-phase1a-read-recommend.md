@@ -30,7 +30,7 @@
 1. **Steam update to an untested build** → every command still answers; `fm doctor` and each JSON result carry `build_supported: false` and the CLI prints `warning: game build <X> is not tested with this plugin (tested: <list>)` on stderr. Never a crash or a Python traceback. (Task 3 test `test_unsupported_build_warns`.)
 2. **Game closed / plugin not loaded / no career / wrong screen** → non-zero exit with one plain sentence (`FM27 is not running with the assistant plugin. Start it from Steam.` / `No career loaded.` / `Open <screen> first.`), and `{"ok": false, "error": {"code", "detail"}}` under `--json`. (Task 1 tests + Task 3 `test_cli_errors_are_one_line`.)
 3. **Player the club has not scouted** → attributes come back exactly as the UI shows them (range like `"8-12"`, or `null` when hidden), never the true value. (Task 8 live check `check_knowledge_parity`.)
-4. **Non-ASCII names and localized labels** (Indonesian UI, `França`, `広瀬 圭`) → byte-exact round trip; plugin logic never matches English or Indonesian text. (Task 1 `test_non_ascii_round_trip`, Task 7/8 live checks compare to screen.)
+4. **Non-ASCII names and localized labels** (Indonesian UI, `Ribeirão`, `山田 太郎`) → byte-exact round trip; plugin logic never matches English or Indonesian text. (Task 1 `test_non_ascii_round_trip`, Task 7/8 live checks compare to screen.)
 5. **Very large search results** (thousands of staff/players) → op returns `count`, `returned`, `truncated: true` within the timeout, capped by `max` (default 200, hard cap 1000) and read in batches of 20. (Task 7 `test_truncation_flag` on the core side + live run with `max=1000`.)
 
 ---
@@ -91,7 +91,7 @@ NOTICE  LICENSE  README.md
   - `test_request_carries_token_and_version` — fake records the request; assert `req["token"] == "t0k"` and `req["v"] == 1`.
   - `test_error_raises_fmerror` — `{"ok":false,"error":{"code":"wrong-screen","detail":"expected X"}}` → `FmError` with `code == "wrong-screen"`, `detail == "expected X"`.
   - `test_unavailable_without_session_file`, `test_unavailable_when_nothing_listening`, `test_unavailable_when_server_never_answers` (timeout 0.5).
-  - `test_non_ascii_round_trip` — `"Rúben Gonçalves"` and `"広瀬 圭"` echo back identical.
+  - `test_non_ascii_round_trip` — `"Rúben Gonçalves"` and `"山田 太郎"` echo back identical.
 - [ ] **Step 2: Run** `cd fm && uv run pytest tests/test_client.py -q` → FAIL (module not found).
 - [ ] **Step 3: Implement** `client.py`: read session file each `call` (plugin restarts change the token); one connection per call (`websockets.sync.client.connect`, no `Origin` header); wait for the matching `id`. Port from `spike/client/fmspike.py`.
 - [ ] **Step 4: Run** the same command → 7 passed.

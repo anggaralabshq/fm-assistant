@@ -122,8 +122,8 @@ def test_unavailable_when_nothing_listening():
         FmClient("ws://127.0.0.1:7799", timeout=1.0).call("ping")
     assert time.monotonic() - t0 < 3.0
 
-def test_non_ascii_round_trip(fake_server_names):    # server returns ["Rúben Gonçalves", "広瀬 圭"]
-    assert FmClient(fake_server_names.url).call("names") == ["Rúben Gonçalves", "広瀬 圭"]
+def test_non_ascii_round_trip(fake_server_names):    # server returns ["Rúben Gonçalves", "山田 太郎"]
+    assert FmClient(fake_server_names.url).call("names") == ["Rúben Gonçalves", "山田 太郎"]
 ```
 
 - [ ] **Step 2: Run tests, expect failure**

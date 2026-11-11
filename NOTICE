@@ -3,10 +3,36 @@ Copyright (c) 2026 wisnuanggara. Licensed under the MIT License (see LICENSE).
 
 This project ports patterns from, or builds on, the following works:
 
-- fm-dof-mcp (MIT License): binding-framework read patterns (fabricate -> bind -> poll -> collect),
-  native Bindings.Create resolution, and the position bit table used in fm/src/fm_assistant/positions.py.
+- fm-dof-mcp (https://github.com/redznn/fm-dof-mcp, MIT License, license text below): binding-framework read
+  patterns (fabricate -> bind -> poll -> collect), native Bindings.Create resolution, the WebSocket server shape,
+  and the position bit table used in fm/src/fm_assistant/positions.py.
 - cli-anything-fm27 (Apache License 2.0): FM27 save-file parsing, used only by development checks.
 - sptndc FM27 BepInEx macOS arm64 loader: required at runtime, not redistributed here.
 
 Football Manager is a trademark of its owners. This project is not affiliated with or endorsed by them,
 and contains no game files or game-database content.
+
+---
+fm-dof-mcp license:
+
+MIT License
+
+Copyright (c) 2026 fm-dof-mcp contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

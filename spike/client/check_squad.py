@@ -18,7 +18,7 @@ def newest_save() -> Path:
 
 
 def same_person(save_name: str, full: str) -> bool:
-    """Save summary shortens to "K. Hirose"; plugin has "Kei Hirose". Single names ("França") match exactly."""
+    """Save summary shortens to "B. Santoso"; plugin has "Budi Santoso". Single names ("Rendra") match exactly."""
     if save_name == full:
         return True
     initial, dot, surname = save_name.partition(". ")

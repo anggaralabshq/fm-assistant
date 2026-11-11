@@ -33,4 +33,4 @@ def test_week_load_counts_matches():
     assert load["weeks"]["2026-W31"]["matches"] == 2      # Jul 27 .. Aug 2
     assert load["weeks"]["2026-W32"]["matches"] == 1
     assert load["weeks"]["2026-W31"]["sessions"]["Istirahat"] == 11
-    assert [p["name"] for p in load["tired"]] == ["広瀬 圭"]   # condition 81 < 85
+    assert [p["name"] for p in load["tired"]] == ["山田 太郎"]   # condition 81 < 85

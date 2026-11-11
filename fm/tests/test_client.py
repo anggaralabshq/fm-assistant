@@ -58,7 +58,7 @@ def test_unavailable_when_pid_dead(fake):
 
 def test_non_ascii_round_trip(fake):
     f = fake(lambda req: {"ok": True, "result": req["args"]["names"]})
-    names = ["Rúben Gonçalves", "広瀬 圭"]
+    names = ["Rúben Gonçalves", "山田 太郎"]
     assert FmClient(f.session).call("echo", names=names) == names
 
 

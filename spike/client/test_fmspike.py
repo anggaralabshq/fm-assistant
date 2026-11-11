@@ -84,6 +84,6 @@ def test_unavailable_when_server_never_answers(server_factory):
 
 
 def test_non_ascii_round_trip(server_factory):
-    names = ["Rúben Gonçalves", "広瀬 圭"]
+    names = ["Rúben Gonçalves", "山田 太郎"]
     s = server_factory(lambda req: {"ok": True, "result": names})
     assert FmClient(s.url).call("names") == names
